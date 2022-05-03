@@ -1,17 +1,22 @@
-# CC = cc
+CC = clang
 BIN = bin
 OBJ = obj
 SRC = src
-TARGET = $(BIN)/main
+TARGET = $(BIN)/editor
 SRCS = $(wildcard $(SRC)/*.c)
 OBJS = $(patsubst $(SRC)/%.c,$(OBJ)/%.o,$(SRCS))
 DEPS = $(OBJS:.o=.d)
 
-CC_COMMON = -std=c11 -march=native -Wall -Wextra -Wpedantic -Werror
-CC_DEBUG = -g -fsanitize=address
+
+PKGS = sdl2
+PKG_FLAGS = $(shell pkg-config --cflags $(PKGS))
+PKG_LIBS = $(shell pkg-config --libs $(PKGS))
+
+CC_COMMON = -std=c11 -march=native -Wall -Wextra -Wpedantic -Werror $(PKG_FLAGS)
+CC_DEBUG = -g -fsanitize=undefined
 CC_RELEASE = -DNDEBUG -O3
-LD_COMMON = 
-LD_DEBUG = -fsanitize=address
+LD_COMMON = $(PKG_LIBS)
+LD_DEBUG = -fsanitize=undefined
 LD_RELEASE = 
 
 CFLAGS = $(CC_COMMON) $(CC_DEBUG)
