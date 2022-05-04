@@ -10,6 +10,7 @@
 #define COL_R(x) ((Uint8)((x >> 16) & 0xFF))
 #define COL_G(x) ((Uint8)((x >> 8) & 0xFF))
 #define COL_B(x) ((Uint8)((x) & 0xFF))
+#define COL_RGB(x) COL_R(x), COL_G(x), COL_B(x)
 
 extern const int PaletteBG;
 extern const int PaletteFG;
