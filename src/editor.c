@@ -55,17 +55,21 @@ static void RenderCString(SDL_Renderer* renderer, SDL_Texture* fontTexture, int 
     RenderSString(renderer, fontTexture, imgWidth, imgHeight, s, strlen(s), p, x0, scl, col);
 }
 
-
-static void HandleTextInput(char* txtBuff, const size_t txtBuffCap, size_t* txtBuffSzP, size_t* txtCursorPosP, const SDL_TextInputEvent* event) {
+static bool InsertSString(char* txtBuff, const size_t txtBuffCap, size_t* txtBuffSzP, size_t* txtCursorPosP, const char* s, int n) {
     const size_t txtBuffSz = *txtBuffSzP, txtCursorPos = *txtCursorPosP;
-    const char* s = event->text;
-    size_t n = strlen(s);
     if (txtBuffSz + n >= txtBuffCap)
-        return;
+        return false;
     memmove(txtBuff+txtCursorPos+n, txtBuff+txtCursorPos, txtBuffSz-txtCursorPos);
     memcpy(txtBuff+txtCursorPos, s, n);
     *txtBuffSzP += n;
     *txtCursorPosP += n;
+    return true;
+}
+
+static void HandleTextInput(char* txtBuff, const size_t txtBuffCap, size_t* txtBuffSzP, size_t* txtCursorPosP, const SDL_TextInputEvent* event) {
+    const char* s = event->text;
+    size_t n = strlen(s);
+    InsertSString(txtBuff, txtBuffCap, txtBuffSzP, txtCursorPosP, s, n);
 }
 
 static void HandleKeyDown(char* txtBuff, const size_t txtBuffCap, size_t* txtBuffSzP, size_t* txtCursorPosP, const SDL_KeyboardEvent* event) {
@@ -77,7 +81,13 @@ static void HandleKeyDown(char* txtBuff, const size_t txtBuffCap, size_t* txtBuf
     // SDL_Keymod mod = e.key.keysym.mod;
     size_t n = 1;
     SDL_Keycode code = event->keysym.sym;
-    if (code == SDLK_BACKSPACE) {
+    if (code == SDLK_RETURN) {
+        InsertSString(txtBuff, txtBuffCap, txtBuffSzP, txtCursorPosP, "\n", 1);
+    }
+    else if (code == SDLK_TAB) {
+        InsertSString(txtBuff, txtBuffCap, txtBuffSzP, txtCursorPosP, "\t", 1);
+    }
+    else if (code == SDLK_BACKSPACE) {
         if (txtCursorPos >= n) {
             memmove(txtBuff+txtCursorPos-n, txtBuff+txtCursorPos, txtBuffSz-txtCursorPos);
             *txtBuffSzP -= n;
