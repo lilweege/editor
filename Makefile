@@ -12,10 +12,10 @@ PKGS = sdl2
 PKG_FLAGS = $(shell pkg-config --cflags $(PKGS))
 PKG_LIBS = $(shell pkg-config --libs $(PKGS))
 
-CC_COMMON = -std=c11 -march=native -Wall -Wextra -Wpedantic -Werror $(PKG_FLAGS)
+CC_COMMON = -std=c11 -march=native -Wall -Wextra -Wpedantic $(PKG_FLAGS)
 CC_DEBUG = -g -fsanitize=undefined
-CC_RELEASE = -DNDEBUG -O3
-LD_COMMON = $(PKG_LIBS)
+CC_RELEASE = -DNDEBUG -O3 -Werror
+LD_COMMON = $(PKG_LIBS) -lm
 LD_DEBUG = -fsanitize=undefined
 LD_RELEASE = 
 
