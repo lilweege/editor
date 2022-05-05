@@ -1,10 +1,10 @@
-#include <SDL2/SDL_keycode.h>
+#include "textbuffer.h"
 #include <stdbool.h>
 #include <string.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-#include "SDL_helper.h"
+#include "error.h"
 #include <SDL2/SDL.h>
 
 #include "font.h"
@@ -29,86 +29,58 @@ static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, in
     SDL_CHECK_CODE(SDL_RenderCopy(renderer, fontTexture, &sourceRect, &screenRect));
 }
 
-
-static void RenderSString(SDL_Renderer* renderer, SDL_Texture* fontTexture, int imgWidth, int imgHeight, const char* s, size_t n, SDL_Point* p, int x0, float scl, Uint32 col) {
-    SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_R(col), COL_G(col), COL_B(col)));
-    int fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
-    int fontCharHeight = imgHeight;
-    for (size_t i = 0; i < n; ++i) {
-        char c = s[i];
-        RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, c, p->x, p->y, scl);
-        if (ASCII_PRINTABLE_MIN <= c && c <= ASCII_PRINTABLE_MAX) {
-            p->x += fontCharWidth*scl;
-        }
-        else if (c == '\t') {
-            p->x += fontCharWidth*scl * TAB_SIZE;
-        }
-        else if (c == '\n') {
-            p->x = x0;
-            p->y += fontCharHeight*scl;
-        }
-        // otherwise, ignore it
-    }
-}
-
-static void RenderCString(SDL_Renderer* renderer, SDL_Texture* fontTexture, int imgWidth, int imgHeight, const char* s, SDL_Point* p, int x0, float scl, Uint32 col) {
-    RenderSString(renderer, fontTexture, imgWidth, imgHeight, s, strlen(s), p, x0, scl, col);
-}
-
-static bool InsertSString(char* txtBuff, const size_t txtBuffCap, size_t* txtBuffSzP, size_t* txtCursorPosP, const char* s, int n) {
-    const size_t txtBuffSz = *txtBuffSzP, txtCursorPos = *txtCursorPosP;
-    if (txtBuffSz + n >= txtBuffCap)
-        return false;
-    memmove(txtBuff+txtCursorPos+n, txtBuff+txtCursorPos, txtBuffSz-txtCursorPos);
-    memcpy(txtBuff+txtCursorPos, s, n);
-    *txtBuffSzP += n;
-    *txtCursorPosP += n;
-    return true;
-}
-
-static void HandleTextInput(char* txtBuff, const size_t txtBuffCap, size_t* txtBuffSzP, size_t* txtCursorPosP, const SDL_TextInputEvent* event) {
+static void HandleTextInput(TextBuffer* tb, size_t* cursorCol, size_t* cursorLn, const SDL_TextInputEvent* event) {
+    LineBuffer** lb = tb->lines + *cursorLn;
     const char* s = event->text;
     size_t n = strlen(s);
-    InsertSString(txtBuff, txtBuffCap, txtBuffSzP, txtCursorPosP, s, n);
+    LineBufferInsert(lb, s, n, *cursorCol);
+    *cursorCol += n;
 }
 
-static void HandleKeyDown(char* txtBuff, const size_t txtBuffCap, size_t* txtBuffSzP, size_t* txtCursorPosP, const SDL_KeyboardEvent* event) {
-    const size_t txtBuffSz = *txtBuffSzP, txtCursorPos = *txtCursorPosP;
+static void HandleKeyDown(TextBuffer* tb, size_t* cursorCol, size_t* cursorLn, const SDL_KeyboardEvent* event) {
+    LineBuffer** lb = tb->lines + *cursorLn;
     // TODO: cursor, text selection, clipboard, zoom, undo/redo, line move, multi-cursor
     // keys: backspace, delete, enter, home, end, pgup, pgdown, left/right, up/down, tab
     // mods: ctrl, shift, alt
     
     // SDL_Keymod mod = e.key.keysym.mod;
-    size_t n = 1;
+    size_t n = 1; // mod change this
     SDL_Keycode code = event->keysym.sym;
     if (code == SDLK_RETURN) {
-        InsertSString(txtBuff, txtBuffCap, txtBuffSzP, txtCursorPosP, "\n", 1);
+        TextBufferInsert(tb, tb->numLines);
+        *cursorLn += 1;
+        *cursorCol = 0;
     }
-    else if (code == SDLK_TAB) {
-        InsertSString(txtBuff, txtBuffCap, txtBuffSzP, txtCursorPosP, "\t", 1);
+    if (code == SDLK_TAB) {
+        LineBufferInsert(lb, "\t", 1, *cursorCol);
+        *cursorCol += n;
     }
     else if (code == SDLK_BACKSPACE) {
-        if (txtCursorPos >= n) {
-            memmove(txtBuff+txtCursorPos-n, txtBuff+txtCursorPos, txtBuffSz-txtCursorPos);
-            *txtBuffSzP -= n;
-            *txtCursorPosP -= n;
+        if (*cursorCol >= n) {
+            *cursorCol -= n;
+            LineBufferErase(lb, n, *cursorCol);
         }
     }
     else if (code == SDLK_DELETE) {
-        if (txtCursorPos + n <= txtBuffSz) {
-            memmove(txtBuff+txtCursorPos, txtBuff+txtCursorPos+n, txtBuffSz-txtCursorPos-n);
-            *txtBuffSzP -= n;
+        if (*cursorCol + n <= (*lb)->numCols) {
+            LineBufferErase(lb, n, *cursorCol);
         }
     }
     else if (code == SDLK_LEFT) {
-        if (txtCursorPos >= n) {
-            *txtCursorPosP -= n;
+        if (*cursorCol >= n) {
+            *cursorCol -= n;
         }
     }
     else if (code == SDLK_RIGHT) {
-        if (txtCursorPos + n <= txtBuffSz) {
-            *txtCursorPosP += n;
+        if (*cursorCol + n <= (*lb)->numCols) {
+            *cursorCol += n;
         }
+    }
+    else if (code == SDLK_UP) {
+        *cursorLn -= 1;
+    }
+    else if (code == SDLK_DOWN) {
+        *cursorLn += 1;
     }
 }
 
@@ -152,12 +124,8 @@ int main(void) {
     
     SDL_FreeSurface(fontSurface);
 
-    size_t txtBuffSz = 0;
-    size_t txtCursorPos = 0;
-    const size_t txtBuffCap = 1024;
-    char txtBuff[txtBuffCap];
-    memset(txtBuff, '_', 1023);
-
+    size_t cursorCol = 0, cursorLn = 0;
+    TextBuffer textBuff = TextBufferNew(8);
 
     for (bool quit = false; !quit;) {
         SDL_Event e;
@@ -167,11 +135,11 @@ int main(void) {
             } break;
 
             case SDL_TEXTINPUT: {
-                HandleTextInput(txtBuff, txtBuffCap, &txtBuffSz, &txtCursorPos, &e.text);
+                HandleTextInput(&textBuff, &cursorCol, &cursorLn, &e.text);
             } break;
 
             case SDL_KEYDOWN: {
-                HandleKeyDown(txtBuff, txtBuffCap, &txtBuffSz, &txtCursorPos, &e.key);
+                HandleKeyDown(&textBuff, &cursorCol, &cursorLn, &e.key);
             } break;
         }
 
@@ -179,22 +147,30 @@ int main(void) {
         SDL_CHECK_CODE(SDL_RenderClear(renderer));
 
         const float fontScl = 2.0f;
-        const int leftMargin = 0;
-        SDL_Point cursor = { 0, 0 };
-        RenderSString(renderer, fontTexture, imgWidth, imgHeight, txtBuff, txtCursorPos, &cursor, leftMargin, fontScl, PaletteFG);
-        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteFG), 255));
-
         int fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
         int fontCharHeight = imgHeight;
-        // line cursor
-        // SDL_Rect r = {.x=cursor.x, .y=cursor.y, .w=2, .h=fontCharHeight*fontScl};
-        // SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &r));
+        
+        SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(0xFFFFFF)));
+        for (size_t sx = 0, sy = 0, y = 0; y < textBuff.numLines; ++y) {
+            for (size_t x = 0; x < textBuff.lines[y]->numCols; ++x) {
+                char ch = textBuff.lines[y]->buff[x];
+                if (ASCII_PRINTABLE_MIN <= ch && ch <= ASCII_PRINTABLE_MAX) {
+                    RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, fontScl);
+                    sx += fontCharWidth*fontScl;
+                }
+                else if (ch == '\t') {
+                    sx += fontCharWidth*fontScl * TAB_SIZE;
+                }
+                // otherwise, ignore it
+            }
+            sx = 0;
+            sy += fontCharHeight*fontScl;
+        }
+
         // block cursor
-        SDL_Rect r = {.x=cursor.x, .y=cursor.y, .w=fontCharWidth*fontScl, .h=fontCharHeight*fontScl};
+        SDL_Rect r = {.x=cursorCol*fontCharWidth*fontScl, .y=cursorLn*fontCharHeight*fontScl, .w=fontCharWidth*fontScl, .h=fontCharHeight*fontScl};
+        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteFG), 255));
         SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
-
-        RenderSString(renderer, fontTexture, imgWidth, imgHeight, txtBuff+txtCursorPos, txtBuffSz-txtCursorPos, &cursor, leftMargin, fontScl, PaletteFG);
-
         
         SDL_RenderPresent(renderer);
     }
