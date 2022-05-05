@@ -1,18 +1,13 @@
-#include "SDL_helper.h"
+#include "error.h"
 #include "stb_image.h"
-#include <stdio.h>
 #include <SDL2/SDL_error.h>
 
 void SDLError(const char* file, int line) {
-    fprintf(stderr, "%s:%d: SDL ERROR: %s",
-        file, line, SDL_GetError());
-    exit(1);
+    PANIC("SDL", SDL_GetError(), file, line);
 }
 
 void STBIError(const char* file, int line) {
-    fprintf(stderr, "%s:%d: SDL ERROR: %s\n",
-        file, line, stbi_failure_reason());
-    exit(1);
+    PANIC("STBI", stbi_failure_reason(), file, line);
 }
 
 int SDLCheckCode(int code, const char* file, int line) {
