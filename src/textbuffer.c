@@ -63,19 +63,17 @@ TextBuffer TextBufferNew(size_t initLines) {
     };
     if (tb.lines == NULL)
         PANIC_HERE("MALLOC", "Could not allocate TextBuffer");
-    for (size_t i = 0; i < tb.maxLines; ++i)
-        tb.lines[i] = LineBufferNew(LB_MIN);
+    tb.lines[0] = LineBufferNew(LB_MIN);
     return tb;
 }
 
 void TextBufferFree(TextBuffer tb) {
-    for (size_t i = 0; i < tb.maxLines; ++i)
+    for (size_t i = 0; i < tb.numLines; ++i)
         LineBufferFree(tb.lines[i]);
     free(tb.lines);
 }
 
 static bool TextBufferRealloc(TextBuffer* tbP, size_t newMax) {
-    printf("REALLOC TB\n");
     if (newMax < LB_MIN)
         newMax = LB_MIN;
     LineBuffer** newLines = realloc(tbP->lines, newMax * sizeof(LineBuffer*));
@@ -89,16 +87,18 @@ static bool TextBufferRealloc(TextBuffer* tbP, size_t newMax) {
 // TODO: check correctness
 // my brain is turned off right now
 void TextBufferInsert(TextBuffer* tbP, size_t idx) {
-    if (++tbP->numLines > tbP->maxLines * TB_GROW_THRESH && !TextBufferRealloc(tbP, tbP->numLines << 1))
+    if (tbP->numLines+1 > tbP->maxLines * TB_GROW_THRESH && !TextBufferRealloc(tbP, tbP->maxLines << 1))
         PANIC_HERE("MALLOC", "Could not grow TextBuffer");
-    memmove(tbP->lines+idx+1, tbP->lines+idx, tbP->numLines-idx);
+    memmove(tbP->lines+idx+1, tbP->lines+idx, (tbP->numLines-idx) * sizeof(LineBuffer*));
+    ++tbP->numLines;
     tbP->lines[idx] = LineBufferNew(LB_MIN);
 }
 
 void TextBufferErase(TextBuffer* tbP, size_t idx) {
     LineBufferFree(tbP->lines[idx]);
-    memmove(tbP->lines+idx, tbP->lines+idx+1, tbP->numLines-idx);
-    if (--tbP->numLines > tbP->maxLines * TB_SHRINK_THRESH && !TextBufferRealloc(tbP, tbP->numLines >> 1))
+    --tbP->numLines;
+    memmove(tbP->lines+idx, tbP->lines+idx+1, (tbP->numLines-idx) * sizeof(LineBuffer*));
+    if (tbP->numLines > tbP->maxLines * TB_SHRINK_THRESH && !TextBufferRealloc(tbP, tbP->maxLines >> 1))
         PANIC_HERE("MALLOC", "Could not shrink TextBuffer");
 }
 

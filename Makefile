@@ -13,10 +13,10 @@ PKG_FLAGS = $(shell pkg-config --cflags $(PKGS))
 PKG_LIBS = $(shell pkg-config --libs $(PKGS))
 
 CC_COMMON = -std=c11 -march=native -Wall -Wextra -Wpedantic $(PKG_FLAGS)
-CC_DEBUG = -g -fsanitize=undefined
+CC_DEBUG = -g -fsanitize=undefined,address
 CC_RELEASE = -DNDEBUG -O3 -Werror
 LD_COMMON = $(PKG_LIBS) -lm
-LD_DEBUG = -fsanitize=undefined
+LD_DEBUG = -fsanitize=undefined,address
 LD_RELEASE = 
 
 CFLAGS = $(CC_COMMON) $(CC_DEBUG)
