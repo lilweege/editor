@@ -38,6 +38,7 @@ static void HandleTextInput(TextBuffer* tb, size_t* cursorCol, size_t* cursorLn,
 }
 
 static void HandleKeyDown(TextBuffer* tb, size_t* cursorCol, size_t* cursorLn, const SDL_KeyboardEvent* event) {
+    // NOTE: pointers become invalid after insertions
     LineBuffer** lb = tb->lines + *cursorLn;
     // TODO: cursor, text selection, clipboard, zoom, undo/redo, line move, multi-cursor
     // keys: backspace, delete, enter, home, end, pgup, pgdown, left/right, up/down, tab
@@ -47,11 +48,26 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorCol, size_t* cursorLn, c
     size_t n = 1; // mod change this
     SDL_Keycode code = event->keysym.sym;
     if (code == SDLK_RETURN) {
-        TextBufferInsert(tb, tb->numLines);
-        *cursorLn += 1;
-        *cursorCol = 0;
+        // slight optimization: when splitting the current line, choose smaller half to reinsert
+        // if (*cursorCol > lb->numCols/2) {
+            // smaller second half
+            TextBufferInsert(tb, *cursorLn + 1);
+            LineBufferInsert(tb->lines + *cursorLn + 1,
+                tb->lines[*cursorLn]->buff + *cursorCol,
+                tb->lines[*cursorLn]->numCols - *cursorCol,
+                0);
+            LineBufferErase(tb->lines + *cursorLn,
+                tb->lines[*cursorLn]->numCols - *cursorCol,
+                *cursorCol);
+            *cursorCol = 0;
+            *cursorLn += 1;
+        // }
+        // else {
+        //     // smaller first half
+
+        // }
     }
-    if (code == SDLK_TAB) {
+    else if (code == SDLK_TAB) {
         LineBufferInsert(lb, "\t", 1, *cursorCol);
         *cursorCol += n;
     }
@@ -66,21 +82,55 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorCol, size_t* cursorLn, c
             LineBufferErase(lb, n, *cursorCol);
         }
     }
+
+    // TODO: fine tune cursor movement
     else if (code == SDLK_LEFT) {
         if (*cursorCol >= n) {
             *cursorCol -= n;
+        }
+        else if (*cursorLn >= 1) {
+            *cursorLn -= 1;
+            *cursorCol = tb->lines[*cursorLn]->numCols;
         }
     }
     else if (code == SDLK_RIGHT) {
         if (*cursorCol + n <= (*lb)->numCols) {
             *cursorCol += n;
         }
+        else if (*cursorLn + 1 < tb->numLines) {
+            *cursorCol = 0;
+            *cursorLn += 1;
+        }
     }
     else if (code == SDLK_UP) {
-        *cursorLn -= 1;
+        if (*cursorLn >= 1) {
+            *cursorLn -= 1;
+            size_t cols = tb->lines[*cursorLn]->numCols;
+            if (*cursorCol > cols)
+                *cursorCol = cols;
+        }
+        else {
+            *cursorLn = 0;
+            *cursorCol = 0;
+        }
     }
     else if (code == SDLK_DOWN) {
-        *cursorLn += 1;
+        if (*cursorLn + 1 < tb->numLines) {
+            *cursorLn += 1;
+            size_t cols = tb->lines[*cursorLn]->numCols;
+            if (*cursorCol > cols)
+                *cursorCol = cols;
+        }
+        else {
+            *cursorLn = tb->numLines-1;
+            *cursorCol = tb->lines[*cursorLn]->numCols;
+        }
+    }
+    else if (code == SDLK_END) {
+        *cursorCol = tb->lines[*cursorLn]->numCols;
+    }
+    else if (code == SDLK_HOME) {
+        *cursorCol = 0;
     }
 }
 
@@ -150,27 +200,55 @@ int main(void) {
         int fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
         int fontCharHeight = imgHeight;
         
-        SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(0xFFFFFF)));
-        for (size_t sx = 0, sy = 0, y = 0; y < textBuff.numLines; ++y) {
-            for (size_t x = 0; x < textBuff.lines[y]->numCols; ++x) {
+        // // debug, doesn't handle tabs
+        // for (size_t y = 0; y < textBuff.numLines; ++y) {
+        //     SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(0xFF0000), 255));
+        //     for (size_t x = 0; x < textBuff.lines[y]->maxCols; ++x) {
+        //         if (x == textBuff.lines[y]->numCols)
+        //             SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(0xFFFF00), 255));
+        //         SDL_Rect cell = {.x=fontCharWidth*fontScl*x, .y=fontCharHeight*fontScl*y, .w=fontCharWidth*fontScl, .h=fontCharHeight*fontScl};
+        //         SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &cell));
+        //     }
+        // }
+        // SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(0xFF00FF), 255));
+        // for (size_t y = 0; y < textBuff.numLines; ++y) {
+        //     SDL_Rect cell = {.x=textBuff.lines[y]->numCols*fontCharWidth*fontScl, .y=y*fontCharHeight*fontScl, .w=4, .h=fontCharHeight*fontScl};
+        //     SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &cell));
+        // }
+        // SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(0x00FF00), 255));
+        // for (size_t y = 0; y < textBuff.maxLines; ++y) {
+        //     size_t x = (y < textBuff.numLines) ? textBuff.lines[y]->numCols : 0;
+        //     SDL_Rect cell = {.x=x*fontCharWidth*fontScl+4, .y=y*fontCharHeight*fontScl, .w=4, .h=fontCharHeight*fontScl};
+        //     SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &cell));
+        // }
+
+
+        // this loop will change when syntax highlighting is added
+        SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteW1))); // cursor
+        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteFG), 255)); // font
+        for (size_t y = 0; y < textBuff.numLines; ++y) {
+            size_t sx = 0, sy = y * fontCharHeight * fontScl;
+            size_t N = textBuff.lines[y]->numCols;
+            for (size_t x = 0;; ++x) {
+                // draw cursor
+                if (y == cursorLn && x == cursorCol) {
+                    SDL_Rect r = {.x=sx, .y=sy, .w=2, .h=fontCharHeight*fontScl};
+                    SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
+                }
+
+                if (x >= N)
+                    break;
+
+                // draw character
                 char ch = textBuff.lines[y]->buff[x];
                 if (ASCII_PRINTABLE_MIN <= ch && ch <= ASCII_PRINTABLE_MAX) {
                     RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, fontScl);
-                    sx += fontCharWidth*fontScl;
                 }
-                else if (ch == '\t') {
-                    sx += fontCharWidth*fontScl * TAB_SIZE;
-                }
-                // otherwise, ignore it
+                // else handle non printable chars
+                int cw = (1 + (ch == '\t') * (TAB_SIZE-1));
+                sx += fontCharWidth * fontScl * cw;
             }
-            sx = 0;
-            sy += fontCharHeight*fontScl;
         }
-
-        // block cursor
-        SDL_Rect r = {.x=cursorCol*fontCharWidth*fontScl, .y=cursorLn*fontCharHeight*fontScl, .w=fontCharWidth*fontScl, .h=fontCharHeight*fontScl};
-        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteFG), 255));
-        SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
         
         SDL_RenderPresent(renderer);
     }
