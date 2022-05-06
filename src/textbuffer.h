@@ -7,7 +7,11 @@
 #define LB_MIN 8
 #define LB_GROW_THRESH 0.75
 #define LB_SHRINK_THRESH 0.25
-#define TB_MIN 64
+#ifdef NDEBUG
+  #define TB_MIN 64
+#else
+  #define TB_MIN 8
+#endif
 #define TB_GROW_THRESH 0.75
 #define TB_SHRINK_THRESH 0.25
 

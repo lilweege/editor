@@ -74,8 +74,8 @@ void TextBufferFree(TextBuffer tb) {
 }
 
 static bool TextBufferRealloc(TextBuffer* tbP, size_t newMax) {
-    if (newMax < LB_MIN)
-        newMax = LB_MIN;
+    if (newMax < TB_MIN)
+        newMax = TB_MIN;
     LineBuffer** newLines = realloc(tbP->lines, newMax * sizeof(LineBuffer*));
     if (newLines == NULL)
         return false;
@@ -84,8 +84,6 @@ static bool TextBufferRealloc(TextBuffer* tbP, size_t newMax) {
     return true;
 }
 
-// TODO: check correctness
-// my brain is turned off right now
 void TextBufferInsert(TextBuffer* tbP, size_t idx) {
     if (tbP->numLines+1 > tbP->maxLines * TB_GROW_THRESH && !TextBufferRealloc(tbP, tbP->maxLines << 1))
         PANIC_HERE("MALLOC", "Could not grow TextBuffer");
@@ -96,9 +94,9 @@ void TextBufferInsert(TextBuffer* tbP, size_t idx) {
 
 void TextBufferErase(TextBuffer* tbP, size_t idx) {
     LineBufferFree(tbP->lines[idx]);
-    --tbP->numLines;
     memmove(tbP->lines+idx, tbP->lines+idx+1, (tbP->numLines-idx) * sizeof(LineBuffer*));
-    if (tbP->numLines > tbP->maxLines * TB_SHRINK_THRESH && !TextBufferRealloc(tbP, tbP->maxLines >> 1))
+    --tbP->numLines;
+    if (tbP->numLines < tbP->maxLines * TB_SHRINK_THRESH && !TextBufferRealloc(tbP, tbP->maxLines >> 1))
         PANIC_HERE("MALLOC", "Could not shrink TextBuffer");
 }
 
