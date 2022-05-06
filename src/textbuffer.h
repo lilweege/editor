@@ -33,7 +33,7 @@ void LineBufferErase(LineBuffer** lbP, size_t n, size_t idx);
 
 TextBuffer TextBufferNew(size_t initLines);
 void TextBufferFree(TextBuffer tb);
-void TextBufferInsert(TextBuffer* tbP, size_t idx);
-void TextBufferErase(TextBuffer* tbP, size_t idx);
+void TextBufferInsert(TextBuffer* tbP, size_t n, size_t idx);
+void TextBufferErase(TextBuffer* tbP, size_t n, size_t idx);
 
 #endif // TEXTBUFFER_H_
