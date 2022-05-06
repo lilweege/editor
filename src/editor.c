@@ -29,82 +29,98 @@ static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, in
     SDL_CHECK_CODE(SDL_RenderCopy(renderer, fontTexture, &sourceRect, &screenRect));
 }
 
-static void HandleTextInput(TextBuffer* tb, size_t* cursorCol, size_t* cursorLn, const SDL_TextInputEvent* event) {
+static void HandleTextInput(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCol, size_t* cursorLn, const SDL_TextInputEvent* event) {
     LineBuffer** lb = tb->lines + *cursorLn;
     const char* s = event->text;
     size_t n = strlen(s);
     LineBufferInsert(lb, s, n, *cursorCol);
     *cursorCol += n;
+    *cursorColMax = *cursorCol;
 }
 
-static void HandleKeyDown(TextBuffer* tb, size_t* cursorCol, size_t* cursorLn, const SDL_KeyboardEvent* event) {
-    // NOTE: pointers become invalid after insertions
-    LineBuffer** lb = tb->lines + *cursorLn;
+static void HandleKeyDown(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCol, size_t* cursorLn, const SDL_KeyboardEvent* event) {
     // TODO: cursor, text selection, clipboard, zoom, undo/redo, line move, multi-cursor
     // keys: backspace, delete, enter, home, end, pgup, pgdown, left/right, up/down, tab
     // mods: ctrl, shift, alt
-    
+
     // SDL_Keymod mod = e.key.keysym.mod;
-    size_t n = 1; // mod change this
+    // TODO: mod and text selection will add second position to consider
+    // TODO: slight optimizations, when splitting the current line, choose smaller half to reinsert
+    // do this for enter, backspace, delete
     SDL_Keycode code = event->keysym.sym;
     if (code == SDLK_RETURN) {
-        // slight optimization: when splitting the current line, choose smaller half to reinsert
-        // if (*cursorCol > lb->numCols/2) {
-            // smaller second half
-            TextBufferInsert(tb, *cursorLn + 1);
-            LineBufferInsert(tb->lines + *cursorLn + 1,
-                tb->lines[*cursorLn]->buff + *cursorCol,
-                tb->lines[*cursorLn]->numCols - *cursorCol,
-                0);
-            LineBufferErase(tb->lines + *cursorLn,
-                tb->lines[*cursorLn]->numCols - *cursorCol,
-                *cursorCol);
-            *cursorCol = 0;
-            *cursorLn += 1;
-        // }
-        // else {
-        //     // smaller first half
-
-        // }
+        TextBufferInsert(tb, 1, *cursorLn + 1);
+        LineBufferInsert(tb->lines + *cursorLn + 1,
+            tb->lines[*cursorLn]->buff + *cursorCol,
+            tb->lines[*cursorLn]->numCols - *cursorCol,
+            0);
+        LineBufferErase(tb->lines + *cursorLn,
+            tb->lines[*cursorLn]->numCols - *cursorCol,
+            *cursorCol);
+        *cursorCol = 0;
+        *cursorLn += 1;
+        *cursorColMax = *cursorCol;
     }
     else if (code == SDLK_TAB) {
-        LineBufferInsert(lb, "\t", 1, *cursorCol);
-        *cursorCol += n;
+        LineBufferInsert(tb->lines+*cursorLn, "\t", 1, *cursorCol);
+        *cursorCol += 1;
+        *cursorColMax = *cursorCol;
     }
     else if (code == SDLK_BACKSPACE) {
-        if (*cursorCol >= n) {
-            *cursorCol -= n;
-            LineBufferErase(lb, n, *cursorCol);
+        if (*cursorCol >= 1) {
+            *cursorCol -= 1;
+            LineBufferErase(tb->lines+*cursorLn, 1, *cursorCol);
         }
+        else if (*cursorLn != 0) {
+            size_t oldCols = tb->lines[*cursorLn-1]->numCols;
+            LineBufferInsert(tb->lines+*cursorLn-1,
+                tb->lines[*cursorLn]->buff + *cursorCol,
+                tb->lines[*cursorLn]->numCols - *cursorCol,
+                tb->lines[*cursorLn-1]->numCols);
+            *cursorCol = oldCols;
+            TextBufferErase(tb, 1, *cursorLn);
+            *cursorLn -= 1;
+        }
+        *cursorColMax = *cursorCol;
     }
     else if (code == SDLK_DELETE) {
-        if (*cursorCol + n <= (*lb)->numCols) {
-            LineBufferErase(lb, n, *cursorCol);
+        if (*cursorCol + 1 <= tb->lines[*cursorLn]->numCols) {
+            LineBufferErase(tb->lines+*cursorLn, 1, *cursorCol);
         }
+        else if (*cursorLn != tb->numLines-1) {
+            LineBufferInsert(tb->lines+*cursorLn,
+                tb->lines[*cursorLn+1]->buff,
+                tb->lines[*cursorLn+1]->numCols,
+                tb->lines[*cursorLn]->numCols);
+            TextBufferErase(tb, 1, *cursorLn+1);
+        }
+        *cursorColMax = *cursorCol;
     }
-
-    // TODO: fine tune cursor movement
     else if (code == SDLK_LEFT) {
-        if (*cursorCol >= n) {
-            *cursorCol -= n;
+        if (*cursorCol >= 1) {
+            *cursorCol -= 1;
         }
         else if (*cursorLn >= 1) {
             *cursorLn -= 1;
             *cursorCol = tb->lines[*cursorLn]->numCols;
         }
+        *cursorColMax = *cursorCol;
     }
     else if (code == SDLK_RIGHT) {
-        if (*cursorCol + n <= (*lb)->numCols) {
-            *cursorCol += n;
+        if (*cursorCol + 1 <= tb->lines[*cursorLn]->numCols) {
+            *cursorCol += 1;
         }
         else if (*cursorLn + 1 < tb->numLines) {
             *cursorCol = 0;
             *cursorLn += 1;
         }
+        *cursorColMax = *cursorCol;
     }
     else if (code == SDLK_UP) {
         if (*cursorLn >= 1) {
             *cursorLn -= 1;
+            if (*cursorCol < *cursorColMax)
+                *cursorCol = *cursorColMax;
             size_t cols = tb->lines[*cursorLn]->numCols;
             if (*cursorCol > cols)
                 *cursorCol = cols;
@@ -112,11 +128,14 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorCol, size_t* cursorLn, c
         else {
             *cursorLn = 0;
             *cursorCol = 0;
+            *cursorColMax = *cursorCol;
         }
     }
     else if (code == SDLK_DOWN) {
         if (*cursorLn + 1 < tb->numLines) {
             *cursorLn += 1;
+            if (*cursorCol < *cursorColMax)
+                *cursorCol = *cursorColMax;
             size_t cols = tb->lines[*cursorLn]->numCols;
             if (*cursorCol > cols)
                 *cursorCol = cols;
@@ -124,13 +143,16 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorCol, size_t* cursorLn, c
         else {
             *cursorLn = tb->numLines-1;
             *cursorCol = tb->lines[*cursorLn]->numCols;
+            *cursorColMax = *cursorCol;
         }
     }
     else if (code == SDLK_END) {
         *cursorCol = tb->lines[*cursorLn]->numCols;
+        *cursorColMax = *cursorCol;
     }
     else if (code == SDLK_HOME) {
         *cursorCol = 0;
+        *cursorColMax = *cursorCol;
     }
 }
 
@@ -174,7 +196,7 @@ int main(void) {
     
     SDL_FreeSurface(fontSurface);
 
-    size_t cursorCol = 0, cursorLn = 0;
+    size_t cursorColMax = 0, cursorCol = 0, cursorLn = 0;
     TextBuffer textBuff = TextBufferNew(8);
 
     for (bool quit = false; !quit;) {
@@ -185,11 +207,11 @@ int main(void) {
             } break;
 
             case SDL_TEXTINPUT: {
-                HandleTextInput(&textBuff, &cursorCol, &cursorLn, &e.text);
+                HandleTextInput(&textBuff, &cursorColMax, &cursorCol, &cursorLn, &e.text);
             } break;
 
             case SDL_KEYDOWN: {
-                HandleKeyDown(&textBuff, &cursorCol, &cursorLn, &e.key);
+                HandleKeyDown(&textBuff, &cursorColMax, &cursorCol, &cursorLn, &e.key);
             } break;
         }
 
@@ -222,7 +244,6 @@ int main(void) {
         //     SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &cell));
         // }
 
-
         // this loop will change when syntax highlighting is added
         SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteW1))); // cursor
         SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteFG), 255)); // font
@@ -252,4 +273,5 @@ int main(void) {
         
         SDL_RenderPresent(renderer);
     }
+    TextBufferFree(textBuff);
 }
