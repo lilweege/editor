@@ -212,6 +212,12 @@ int main(void) {
         SDL_CreateTextureFromSurface(renderer, fontSurface));
     SDL_FreeSurface(fontSurface);
 
+    SDL_Cursor* const mouseCursorArrow = SDL_CHECK_PTR(
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW));
+    SDL_Cursor* const mouseCursorIBeam = SDL_CHECK_PTR(
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM));
+    SDL_Cursor const* currentMouseCursor = mouseCursorArrow;
+    
     
     int const fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
     int const fontCharHeight = imgHeight;
@@ -231,6 +237,17 @@ int main(void) {
         if (SDL_PollEvent(&e)) switch (e.type) {
             case SDL_QUIT: {
                 quit = true;
+            } break;
+
+            case SDL_MOUSEMOTION: {
+                if (currentMouseCursor != mouseCursorIBeam && (size_t)e.motion.x > leftMarginEnd) {
+                    currentMouseCursor = mouseCursorIBeam;
+                    SDL_SetCursor(mouseCursorIBeam);
+                }
+                else if (currentMouseCursor != mouseCursorArrow && (size_t)e.motion.x <= leftMarginEnd) {
+                    currentMouseCursor = mouseCursorArrow;
+                    SDL_SetCursor(mouseCursorArrow);
+                }
             } break;
 
             case SDL_MOUSEBUTTONDOWN: {
