@@ -156,6 +156,13 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCo
     }
 }
 
+static void UpdateScreenSize(SDL_Renderer* renderer, int fontCharWidth, int fontCharHeight, size_t* sRows, size_t* sCols) {
+    int sw, sh;
+    SDL_GetRendererOutputSize(renderer, &sw, &sh);
+    *sRows = sh / fontCharHeight;
+    *sCols = sw / fontCharWidth;
+}
+
 
 int main(void) {
     SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
@@ -196,14 +203,35 @@ int main(void) {
     
     SDL_FreeSurface(fontSurface);
 
-    size_t cursorColMax = 0, cursorCol = 0, cursorLn = 0;
+    const float fontScl = 2.0f;
+    int fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
+    int fontCharHeight = imgHeight;
+    size_t cursorColMax = 0, cursorCol = 0, cursorLn = 0, topLine = 0;
     TextBuffer textBuff = TextBufferNew(8);
+    size_t sRows, sCols;
+    UpdateScreenSize(renderer, fontCharWidth*fontScl, fontCharHeight*fontScl, &sRows, &sCols);
 
     for (bool quit = false; !quit;) {
         SDL_Event e;
         if (SDL_PollEvent(&e)) switch (e.type) {
             case SDL_QUIT: {
                 quit = true;
+            } break;
+
+            case SDL_MOUSEWHEEL: {
+                // TODO: horizontal scrolling
+                Sint32 dy = e.wheel.y;
+                if ((dy > 0 && topLine >= (size_t)dy) || // up
+                    (dy < 0 && topLine + (-dy) < textBuff.numLines)) // down
+                {
+                    topLine -= dy;
+                }
+            } break;
+
+            case SDL_WINDOWEVENT: { // https://wiki.libsdl.org/SDL_WindowEvent
+                if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    UpdateScreenSize(renderer, fontCharWidth*fontScl, fontCharHeight*fontScl, &sRows, &sCols);
+                }
             } break;
 
             case SDL_TEXTINPUT: {
@@ -218,37 +246,34 @@ int main(void) {
         SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteBG), 255));
         SDL_CHECK_CODE(SDL_RenderClear(renderer));
 
-        const float fontScl = 2.0f;
-        int fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
-        int fontCharHeight = imgHeight;
-        
-        // // debug, doesn't handle tabs
-        // for (size_t y = 0; y < textBuff.numLines; ++y) {
-        //     SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(0xFF0000), 255));
-        //     for (size_t x = 0; x < textBuff.lines[y]->maxCols; ++x) {
-        //         if (x == textBuff.lines[y]->numCols)
-        //             SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(0xFFFF00), 255));
-        //         SDL_Rect cell = {.x=fontCharWidth*fontScl*x, .y=fontCharHeight*fontScl*y, .w=fontCharWidth*fontScl, .h=fontCharHeight*fontScl};
-        //         SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &cell));
-        //     }
-        // }
-        // SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(0xFF00FF), 255));
-        // for (size_t y = 0; y < textBuff.numLines; ++y) {
-        //     SDL_Rect cell = {.x=textBuff.lines[y]->numCols*fontCharWidth*fontScl, .y=y*fontCharHeight*fontScl, .w=4, .h=fontCharHeight*fontScl};
-        //     SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &cell));
-        // }
-        // SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(0x00FF00), 255));
-        // for (size_t y = 0; y < textBuff.maxLines; ++y) {
-        //     size_t x = (y < textBuff.numLines) ? textBuff.lines[y]->numCols : 0;
-        //     SDL_Rect cell = {.x=x*fontCharWidth*fontScl+4, .y=y*fontCharHeight*fontScl, .w=4, .h=fontCharHeight*fontScl};
-        //     SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &cell));
-        // }
 
+        // numLines should never be zero so log is fine
+        int margin = fontCharWidth * fontScl / 2;
+        int leftColumn = margin + ((int)log10(textBuff.numLines)+1) * fontCharWidth * fontScl;
         // this loop will change when syntax highlighting is added
         SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteW1))); // cursor
         SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteFG), 255)); // font
-        for (size_t y = 0; y < textBuff.numLines; ++y) {
-            size_t sx = 0, sy = y * fontCharHeight * fontScl;
+
+        // TODO: cursor autoscroll
+
+        for (size_t y = topLine;
+            y <= topLine+sRows && y < textBuff.numLines;
+            ++y)
+        {
+            int sx, sy = (y-topLine) * fontCharHeight * fontScl;
+
+            // draw line number
+            sx = leftColumn;
+            int lineNum = y+1;
+            while (lineNum != 0) {
+                sx -= fontCharWidth * fontScl;
+                char d = lineNum % 10 + '0';
+                lineNum /= 10;
+                RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, d, sx, sy, fontScl);
+            }
+
+            // draw line
+            sx = leftColumn + margin*2;
             size_t N = textBuff.lines[y]->numCols;
             for (size_t x = 0;; ++x) {
                 // draw cursor
