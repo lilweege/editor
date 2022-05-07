@@ -15,9 +15,9 @@ extern const int InitialWindowWidth;
 extern const int InitialWindowHeight;
 extern const char* ProgramTitle;
 extern const char* FontFilename;
-
 extern const int TabSize;
 
+extern const int PaletteHL;
 extern const int PaletteBG;
 extern const int PaletteFG;
 extern const int PaletteK1;

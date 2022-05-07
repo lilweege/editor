@@ -6,6 +6,7 @@ const char* ProgramTitle = "Editor";
 const char* FontFilename = "FSEX300.png";
 const int TabSize = 4;
 
+const int PaletteHL = 0x4c566a;
 const int PaletteBG = 0x1d1f21;
 const int PaletteFG = 0xc5c8c6;
 const int PaletteK1 = 0x282a2e;
