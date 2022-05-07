@@ -7,7 +7,7 @@
 #include "error.h"
 #include <SDL2/SDL.h>
 
-#include "font.h"
+#include "config.h"
 
 
 static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, int fontCharWidth, int fontCharHeight, char ch, int x, int y, float scl) {
@@ -30,10 +30,9 @@ static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, in
 }
 
 static void HandleTextInput(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCol, size_t* cursorLn, const SDL_TextInputEvent* event) {
-    LineBuffer** lb = tb->lines + *cursorLn;
     const char* s = event->text;
     size_t n = strlen(s);
-    LineBufferInsert(lb, s, n, *cursorCol);
+    LineBufferInsert(tb->lines+*cursorLn, s, n, *cursorCol);
     *cursorCol += n;
     *cursorColMax = *cursorCol;
 }
@@ -163,19 +162,17 @@ static void UpdateScreenSize(SDL_Renderer* renderer, int fontCharWidth, int font
     *sCols = sw / fontCharWidth;
 }
 
-
 int main(void) {
     SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
 
-    SDL_Window* window = SDL_CHECK_PTR(
-        SDL_CreateWindow("Editor", 0, 0, 800, 600, SDL_WINDOW_RESIZABLE));
-
-    SDL_Renderer* renderer = SDL_CHECK_PTR(
+    SDL_Window* const window = SDL_CHECK_PTR(
+        SDL_CreateWindow(ProgramTitle, 0, 0, InitialWindowWidth, InitialWindowHeight, SDL_WINDOW_RESIZABLE));
+    SDL_Renderer* const renderer = SDL_CHECK_PTR(
         SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED));
 
     int imgWidth, imgHeight, imgComps;
-    unsigned char* imgData = STBI_CHECK_PTR(
-        stbi_load("FSEX300.png", &imgWidth, &imgHeight, &imgComps, STBI_rgb_alpha));
+    unsigned char const* const imgData = STBI_CHECK_PTR(
+        stbi_load(FontFilename, &imgWidth, &imgHeight, &imgComps, STBI_rgb_alpha));
 
     
     #if SDL_BYTEORDER == SDL_BIG_ENDIAN
@@ -184,32 +181,29 @@ int main(void) {
             bmask = 0x0000ff00,
             amask = 0x000000ff;
     #else // little endian, like x86
-        Uint32 rmask = 0x000000ff,
+        Uint32 const rmask = 0x000000ff,
             gmask = 0x0000ff00,
             bmask = 0x00ff0000,
             amask = 0xff000000;
     #endif
 
-    int depth = 32;
-    int pitch = 4 * imgWidth;
+    int const depth = 32;
+    int const pitch = 4 * imgWidth;
 
     SDL_Surface* fontSurface = STBI_CHECK_PTR(
         SDL_CreateRGBSurfaceFrom((void*)imgData, imgWidth, imgHeight,
             depth, pitch,
             rmask, gmask, bmask, amask));
-    
     SDL_Texture* fontTexture = SDL_CHECK_PTR(
         SDL_CreateTextureFromSurface(renderer, fontSurface));
-    
     SDL_FreeSurface(fontSurface);
 
-    const float fontScl = 2.0f;
-    int fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
-    int fontCharHeight = imgHeight;
+    int const fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
+    int const fontCharHeight = imgHeight;
     size_t cursorColMax = 0, cursorCol = 0, cursorLn = 0, topLine = 0;
     TextBuffer textBuff = TextBufferNew(8);
     size_t sRows, sCols;
-    UpdateScreenSize(renderer, fontCharWidth*fontScl, fontCharHeight*fontScl, &sRows, &sCols);
+    UpdateScreenSize(renderer, fontCharWidth*FontScale, fontCharHeight*FontScale, &sRows, &sCols);
 
     for (bool quit = false; !quit;) {
         SDL_Event e;
@@ -230,7 +224,7 @@ int main(void) {
 
             case SDL_WINDOWEVENT: { // https://wiki.libsdl.org/SDL_WindowEvent
                 if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
-                    UpdateScreenSize(renderer, fontCharWidth*fontScl, fontCharHeight*fontScl, &sRows, &sCols);
+                    UpdateScreenSize(renderer, fontCharWidth*FontScale, fontCharHeight*FontScale, &sRows, &sCols);
                 }
             } break;
 
@@ -248,37 +242,34 @@ int main(void) {
 
 
         // numLines should never be zero so log is fine
-        int margin = fontCharWidth * fontScl / 2;
-        int leftColumn = margin + ((int)log10(textBuff.numLines)+1) * fontCharWidth * fontScl;
+        int const leftColumn = LineMarginLeft*fontCharWidth*FontScale + ((int)log10(textBuff.numLines)+1) * fontCharWidth * FontScale;
         // this loop will change when syntax highlighting is added
         SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteW1))); // cursor
         SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteFG), 255)); // font
 
         // TODO: cursor autoscroll
 
+        // render
         for (size_t y = topLine;
             y <= topLine+sRows && y < textBuff.numLines;
             ++y)
         {
-            int sx, sy = (y-topLine) * fontCharHeight * fontScl;
+            size_t const sy = (y-topLine) * fontCharHeight * FontScale;
 
             // draw line number
-            sx = leftColumn;
-            int lineNum = y+1;
-            while (lineNum != 0) {
-                sx -= fontCharWidth * fontScl;
-                char d = lineNum % 10 + '0';
-                lineNum /= 10;
-                RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, d, sx, sy, fontScl);
+            size_t sx = leftColumn;
+            for (size_t lineNum = y+1; lineNum > 0; lineNum /= 10) {
+                sx -= fontCharWidth * FontScale;
+                RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, lineNum % 10 + '0', sx, sy, FontScale);
             }
 
             // draw line
-            sx = leftColumn + margin*2;
-            size_t N = textBuff.lines[y]->numCols;
+            sx = leftColumn + LineMarginRight*fontCharWidth*FontScale;
+            size_t const N = textBuff.lines[y]->numCols;
             for (size_t x = 0;; ++x) {
                 // draw cursor
                 if (y == cursorLn && x == cursorCol) {
-                    SDL_Rect r = {.x=sx, .y=sy, .w=2, .h=fontCharHeight*fontScl};
+                    SDL_Rect const r = {.x=sx, .y=sy, .w=2, .h=fontCharHeight*FontScale};
                     SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
                 }
 
@@ -288,11 +279,11 @@ int main(void) {
                 // draw character
                 char ch = textBuff.lines[y]->buff[x];
                 if (ASCII_PRINTABLE_MIN <= ch && ch <= ASCII_PRINTABLE_MAX) {
-                    RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, fontScl);
+                    RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, FontScale);
                 }
                 // else handle non printable chars
                 int cw = (1 + (ch == '\t') * (TAB_SIZE-1));
-                sx += fontCharWidth * fontScl * cw;
+                sx += fontCharWidth * FontScale * cw;
             }
         }
         
