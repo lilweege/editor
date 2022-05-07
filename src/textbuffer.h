@@ -28,7 +28,8 @@ typedef struct {
 
 LineBuffer* LineBufferNew(size_t initCols);
 void LineBufferFree(LineBuffer* lb);
-void LineBufferInsert(LineBuffer** lbP, const char* s, size_t n, size_t idx);
+void LineBufferInsertChr(LineBuffer** lbP, char c, size_t n, size_t idx);
+void LineBufferInsertStr(LineBuffer** lbP, const char* s, size_t n, size_t idx);
 void LineBufferErase(LineBuffer** lbP, size_t n, size_t idx);
 
 TextBuffer TextBufferNew(size_t initLines);

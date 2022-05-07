@@ -5,7 +5,6 @@
 #define ASCII_PRINTABLE_MIN (' ')
 #define ASCII_PRINTABLE_MAX ('~')
 #define ASCII_PRINTABLE_CNT (ASCII_PRINTABLE_MAX - ASCII_PRINTABLE_MIN + 1)
-#define TAB_SIZE 4
 
 #define COL_R(x) ((Uint8)((x >> 16) & 0xFF))
 #define COL_G(x) ((Uint8)((x >> 8) & 0xFF))
@@ -16,6 +15,8 @@ extern const int InitialWindowWidth;
 extern const int InitialWindowHeight;
 extern const char* ProgramTitle;
 extern const char* FontFilename;
+
+extern const int TabSize;
 
 extern const int PaletteBG;
 extern const int PaletteFG;

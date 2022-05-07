@@ -29,14 +29,23 @@ static bool LineBufferRealloc(LineBuffer** lbP, size_t newMax) {
     return true;
 }
 
-void LineBufferInsert(LineBuffer** lbP, const char* s, size_t n, size_t idx) {
-    // grow
+static void LineBufferGrow(LineBuffer** lbP, size_t n) {
     size_t newMax = (*lbP)->maxCols;
     while ((*lbP)->numCols + n > newMax * LB_GROW_THRESH)
         newMax <<= 1;
     if (newMax > (*lbP)->maxCols && !LineBufferRealloc(lbP, newMax))
         PANIC_HERE("MALLOC", "Could not grow LineBuffer");
-    // make space and insert
+}
+
+void LineBufferInsertChr(LineBuffer** lbP, char c, size_t n, size_t idx) {
+    LineBufferGrow(lbP, n);
+    memmove((*lbP)->buff+idx+n, (*lbP)->buff+idx, (*lbP)->numCols-idx);
+    memset((*lbP)->buff+idx, c, n);
+    (*lbP)->numCols += n;
+}
+
+void LineBufferInsertStr(LineBuffer** lbP, const char* s, size_t n, size_t idx) {
+    LineBufferGrow(lbP, n);
     memmove((*lbP)->buff+idx+n, (*lbP)->buff+idx, (*lbP)->numCols-idx);
     memcpy((*lbP)->buff+idx, s, n);
     (*lbP)->numCols += n;

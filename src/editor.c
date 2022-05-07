@@ -32,7 +32,7 @@ static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, in
 static void HandleTextInput(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCol, size_t* cursorLn, const SDL_TextInputEvent* event) {
     const char* s = event->text;
     size_t n = strlen(s);
-    LineBufferInsert(tb->lines+*cursorLn, s, n, *cursorCol);
+    LineBufferInsertStr(tb->lines+*cursorLn, s, n, *cursorCol);
     *cursorCol += n;
     *cursorColMax = *cursorCol;
 }
@@ -49,7 +49,7 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCo
     SDL_Keycode code = event->keysym.sym;
     if (code == SDLK_RETURN) {
         TextBufferInsert(tb, 1, *cursorLn + 1);
-        LineBufferInsert(tb->lines + *cursorLn + 1,
+        LineBufferInsertStr(tb->lines + *cursorLn + 1,
             tb->lines[*cursorLn]->buff + *cursorCol,
             tb->lines[*cursorLn]->numCols - *cursorCol,
             0);
@@ -61,8 +61,8 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCo
         *cursorColMax = *cursorCol;
     }
     else if (code == SDLK_TAB) {
-        LineBufferInsert(tb->lines+*cursorLn, "\t", 1, *cursorCol);
-        *cursorCol += 1;
+        LineBufferInsertChr(tb->lines+*cursorLn, ' ', TabSize, *cursorCol);
+        *cursorCol += TabSize;
         *cursorColMax = *cursorCol;
     }
     else if (code == SDLK_BACKSPACE) {
@@ -72,7 +72,7 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCo
         }
         else if (*cursorLn != 0) {
             size_t oldCols = tb->lines[*cursorLn-1]->numCols;
-            LineBufferInsert(tb->lines+*cursorLn-1,
+            LineBufferInsertStr(tb->lines+*cursorLn-1,
                 tb->lines[*cursorLn]->buff + *cursorCol,
                 tb->lines[*cursorLn]->numCols - *cursorCol,
                 tb->lines[*cursorLn-1]->numCols);
@@ -87,7 +87,7 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCo
             LineBufferErase(tb->lines+*cursorLn, 1, *cursorCol);
         }
         else if (*cursorLn != tb->numLines-1) {
-            LineBufferInsert(tb->lines+*cursorLn,
+            LineBufferInsertStr(tb->lines+*cursorLn,
                 tb->lines[*cursorLn+1]->buff,
                 tb->lines[*cursorLn+1]->numCols,
                 tb->lines[*cursorLn]->numCols);
@@ -155,11 +155,11 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCo
     }
 }
 
-static void GetScreenSize(SDL_Renderer* renderer, int fontCharWidth, int fontCharHeight, size_t* sRows, size_t* sCols) {
+static void GetScreenSize(SDL_Renderer* renderer, int charWidth, int charHeight, size_t* sRows, size_t* sCols) {
     int sw, sh;
     SDL_GetRendererOutputSize(renderer, &sw, &sh);
-    *sRows = sh / fontCharHeight;
-    *sCols = sw / fontCharWidth;
+    *sRows = sh / charHeight;
+    *sCols = sw / charWidth;
 }
 
 static void CursorAutoscroll(size_t* topLine, size_t cursorLn, size_t sRows) {
@@ -171,6 +171,12 @@ static void CursorAutoscroll(size_t* topLine, size_t cursorLn, size_t sRows) {
     }
 }
 
+static void CalculateLeftMargin(size_t* leftMarginBegin, size_t* leftMarginEnd, size_t charWidth, size_t numLines) {
+    // numLines should never be zero so log is fine
+    *leftMarginBegin = LineMarginLeft * charWidth + ((int)log10(numLines)+1) * charWidth;
+    *leftMarginEnd = *leftMarginBegin + LineMarginRight * charWidth;
+}
+
 int main(void) {
     SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
 
@@ -179,11 +185,13 @@ int main(void) {
     SDL_Renderer* const renderer = SDL_CHECK_PTR(
         SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED));
 
+    // image -> surface -> texture
     int imgWidth, imgHeight, imgComps;
     unsigned char const* const imgData = STBI_CHECK_PTR(
         stbi_load(FontFilename, &imgWidth, &imgHeight, &imgComps, STBI_rgb_alpha));
-
     
+    int const depth = 32;
+    int const pitch = 4 * imgWidth;
     Uint32 const
     #if SDL_BYTEORDER == SDL_BIG_ENDIAN
         rmask = 0xff000000,
@@ -197,9 +205,6 @@ int main(void) {
         amask = 0xff000000;
     #endif
 
-    int const depth = 32;
-    int const pitch = 4 * imgWidth;
-
     SDL_Surface* fontSurface = STBI_CHECK_PTR(
         SDL_CreateRGBSurfaceFrom((void*)imgData, imgWidth, imgHeight,
             depth, pitch, rmask, gmask, bmask, amask));
@@ -210,15 +215,51 @@ int main(void) {
     
     int const fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
     int const fontCharHeight = imgHeight;
+    int const charWidth = fontCharWidth * FontScale;
+    int const charHeight = fontCharHeight * FontScale;
     TextBuffer textBuff = TextBufferNew(8);
-    size_t cursorColMax = 0, cursorCol = 0, cursorLn = 0, topLine = 0, sRows, sCols;
-    GetScreenSize(renderer, fontCharWidth*FontScale, fontCharHeight*FontScale, &sRows, &sCols);
+    size_t cursorColMax = 0, cursorCol = 0, cursorLn = 0, topLine = 0,
+        sRows, sCols, leftMarginBegin, leftMarginEnd;
+    GetScreenSize(renderer, charWidth, charHeight, &sRows, &sCols);
+    CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
 
+    // main loop
+    // TODO: yield thread, don't pin cpu
     for (bool quit = false; !quit;) {
+        // handle events
         SDL_Event e;
         if (SDL_PollEvent(&e)) switch (e.type) {
             case SDL_QUIT: {
                 quit = true;
+            } break;
+
+            case SDL_MOUSEBUTTONDOWN: {
+                // TODO: mouse drag selection
+                if (e.button.button == SDL_BUTTON_LEFT) {
+                    assert(e.button.x >= 0);
+                    assert(e.button.y >= 0);
+
+                    size_t cx = e.button.x;
+                    // offset due to line numbers
+                    if (cx < leftMarginEnd) cx = 0;
+                    else cx -= leftMarginEnd;
+                    // round forward or back to nearest char
+                    cx += charWidth / 2;
+
+                    cursorCol = cx / charWidth;
+                    cursorLn = e.button.y / charHeight;
+
+                    // clamp y
+                    if (cursorLn > textBuff.numLines-1)
+                        cursorLn = textBuff.numLines-1;
+
+                    // clamp x
+                    size_t maxCols = textBuff.lines[cursorLn]->numCols;
+                    if (cursorCol > maxCols)
+                        cursorCol = maxCols;
+                    
+                    cursorColMax = cursorCol;
+                }
             } break;
 
             case SDL_MOUSEWHEEL: {
@@ -233,7 +274,7 @@ int main(void) {
 
             case SDL_WINDOWEVENT: { // https://wiki.libsdl.org/SDL_WindowEvent
                 if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
-                    GetScreenSize(renderer, fontCharWidth*FontScale, fontCharHeight*FontScale, &sRows, &sCols);
+                    GetScreenSize(renderer, charWidth, charHeight, &sRows, &sCols);
                 }
             } break;
 
@@ -245,57 +286,53 @@ int main(void) {
             case SDL_KEYDOWN: {
                 HandleKeyDown(&textBuff, &cursorColMax, &cursorCol, &cursorLn, &e.key);
                 CursorAutoscroll(&topLine, cursorLn, sRows);
+                CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
             } break;
         }
 
         SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteBG), 255));
         SDL_CHECK_CODE(SDL_RenderClear(renderer));
-
-
-        // numLines should never be zero so log is fine
-        int const leftColumn = LineMarginLeft*fontCharWidth*FontScale + ((int)log10(textBuff.numLines)+1) * fontCharWidth * FontScale;
-        // this loop will change when syntax highlighting is added
         SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteW1))); // cursor
         SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteFG), 255)); // font
 
-        // render
+        // draw cursor
+        if (cursorLn >= topLine && cursorLn < topLine+sRows) {
+            SDL_Rect const r = {
+                .x = cursorCol * charWidth + leftMarginEnd,
+                .y = (cursorLn-topLine) * charHeight,
+                .w = 2,
+                .h = charHeight,
+            };
+            SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
+        }
+        
+        // TODO: this loop will change when syntax highlighting is added
         for (size_t y = topLine;
             y <= topLine+sRows && y < textBuff.numLines;
             ++y)
         {
-            size_t const sy = (y-topLine) * fontCharHeight * FontScale;
+            size_t const sy = (y-topLine) * charHeight;
 
             // draw line number
-            size_t sx = leftColumn;
+            size_t sx = leftMarginBegin;
             for (size_t lineNum = y+1; lineNum > 0; lineNum /= 10) {
-                sx -= fontCharWidth * FontScale;
+                sx -= charWidth;
                 RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, lineNum % 10 + '0', sx, sy, FontScale);
             }
 
             // draw line
-            sx = leftColumn + LineMarginRight*fontCharWidth*FontScale;
-            size_t const N = textBuff.lines[y]->numCols;
-            for (size_t x = 0;; ++x) {
-                // draw cursor
-                if (y == cursorLn && x == cursorCol) {
-                    SDL_Rect const r = {.x=sx, .y=sy, .w=2, .h=fontCharHeight*FontScale};
-                    SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
-                }
-
-                if (x >= N)
-                    break;
-
+            sx = leftMarginEnd;
+            for (size_t x = 0; x < textBuff.lines[y]->numCols; ++x) {
                 // draw character
                 char ch = textBuff.lines[y]->buff[x];
                 if (ASCII_PRINTABLE_MIN <= ch && ch <= ASCII_PRINTABLE_MAX) {
                     RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, FontScale);
                 }
                 // else handle non printable chars
-                int cw = (1 + (ch == '\t') * (TAB_SIZE-1));
-                sx += fontCharWidth * FontScale * cw;
+                sx += charWidth;
             }
         }
-        
+
         SDL_RenderPresent(renderer);
     }
     TextBufferFree(textBuff);

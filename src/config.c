@@ -4,6 +4,7 @@ const int InitialWindowWidth = 800;
 const int InitialWindowHeight = 600;
 const char* ProgramTitle = "Editor";
 const char* FontFilename = "FSEX300.png";
+const int TabSize = 4;
 
 const int PaletteBG = 0x1d1f21;
 const int PaletteFG = 0xc5c8c6;
