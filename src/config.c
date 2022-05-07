@@ -1,4 +1,9 @@
-#include "font.h"
+#include "config.h"
+
+const int InitialWindowWidth = 800;
+const int InitialWindowHeight = 600;
+const char* ProgramTitle = "Editor";
+const char* FontFilename = "FSEX300.png";
 
 const int PaletteBG = 0x1d1f21;
 const int PaletteFG = 0xc5c8c6;
@@ -18,3 +23,8 @@ const int PaletteB2 = 0x95a9d6;
 const int PaletteM2 = 0xb59fd6;
 const int PaletteC2 = 0x95e1d2;
 const int PaletteW2 = 0xdddddd;
+
+const float FontScale = 2.0f;
+const float LineMarginLeft = 0.5f;
+const float LineMarginRight = 1.0f;
+

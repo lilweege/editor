@@ -1,5 +1,5 @@
-#ifndef FONT_H_
-#define FONT_H_
+#ifndef CONFIG_H_
+#define CONFIG_H_
 
 
 #define ASCII_PRINTABLE_MIN (' ')
@@ -11,6 +11,11 @@
 #define COL_G(x) ((Uint8)((x >> 8) & 0xFF))
 #define COL_B(x) ((Uint8)((x) & 0xFF))
 #define COL_RGB(x) COL_R(x), COL_G(x), COL_B(x)
+
+extern const int InitialWindowWidth;
+extern const int InitialWindowHeight;
+extern const char* ProgramTitle;
+extern const char* FontFilename;
 
 extern const int PaletteBG;
 extern const int PaletteFG;
@@ -31,4 +36,8 @@ extern const int PaletteM2;
 extern const int PaletteC2;
 extern const int PaletteW2;
 
-#endif // FONT_H_
+extern const float FontScale;
+extern const float LineMarginLeft;
+extern const float LineMarginRight;
+
+#endif // CONFIG_H_
