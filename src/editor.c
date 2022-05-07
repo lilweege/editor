@@ -1,5 +1,7 @@
 #include "textbuffer.h"
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -177,6 +179,34 @@ static void CalculateLeftMargin(size_t* leftMarginBegin, size_t* leftMarginEnd, 
     *leftMarginEnd = *leftMarginBegin + LineMarginRight * charWidth;
 }
 
+static bool lexLe(size_t y0, size_t x0, size_t y1, size_t x1) {
+    // (y0,x0) <=_lex (y1,x1)
+    return (y0 < y1) || (y0 == y1 && x0 <= x1);
+}
+
+static bool isBetween(size_t ln, size_t col, size_t y0, size_t x0, size_t y1, size_t x1) {
+    // (y0,x0) <= (ln,col) <= (y1,x1)
+    return lexLe(y0, x0, ln, col) && lexLe(ln, col, y1, x1);
+}
+
+static void UpdateSelection(
+    size_t* selectionBeginCol, size_t* selectionBeginLn, size_t* selectionEndCol, size_t* selectionEndLn,
+    size_t cursorLn, size_t cursorCol, size_t selectionLn, size_t selectionCol
+) {
+    if (lexLe(cursorLn, cursorCol, selectionLn, selectionCol)) {
+        *selectionBeginCol = cursorCol;
+        *selectionBeginLn = cursorLn;
+        *selectionEndCol = selectionCol;
+        *selectionEndLn = selectionLn;
+    }
+    else {
+        *selectionBeginCol = selectionCol;
+        *selectionBeginLn = selectionLn;
+        *selectionEndCol = cursorCol;
+        *selectionEndLn = cursorLn;
+    }
+}
+
 int main(void) {
     SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
 
@@ -224,8 +254,10 @@ int main(void) {
     int const charWidth = fontCharWidth * FontScale;
     int const charHeight = fontCharHeight * FontScale;
     TextBuffer textBuff = TextBufferNew(8);
-    size_t cursorColMax = 0, cursorCol = 0, cursorLn = 0, topLine = 0,
+    size_t cursorCol = 0, cursorLn = 0, cursorColMax = 0, topLine = 0,
+        selectionCol = 0, selectionLn = 0, selectionBeginCol = 0, selectionBeginLn = 0, selectionEndCol = 0, selectionEndLn = 0,
         sRows, sCols, leftMarginBegin, leftMarginEnd;
+    bool mouseHeld = false;
     GetScreenSize(renderer, charWidth, charHeight, &sRows, &sCols);
     CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
 
@@ -253,6 +285,7 @@ int main(void) {
             case SDL_MOUSEBUTTONDOWN: {
                 // TODO: mouse drag selection
                 if (e.button.button == SDL_BUTTON_LEFT) {
+                    mouseHeld = true;
                     assert(e.button.x >= 0);
                     assert(e.button.y >= 0);
 
@@ -263,19 +296,39 @@ int main(void) {
                     // round forward or back to nearest char
                     cx += charWidth / 2;
 
-                    cursorCol = cx / charWidth;
-                    cursorLn = e.button.y / charHeight;
+                    // cursorCol = cx / charWidth;
+                    // cursorLn = e.button.y / charHeight;
+
+                    // // clamp y
+                    // if (cursorLn > textBuff.numLines-1)
+                    //     cursorLn = textBuff.numLines-1;
+
+                    // // clamp x
+                    // size_t maxCols = textBuff.lines[cursorLn]->numCols;
+                    // if (cursorCol > maxCols)
+                    //     cursorCol = maxCols;
+                    
+                    // cursorColMax = cursorCol;
+
+                    selectionCol = cx / charWidth;
+                    selectionLn = e.button.y / charHeight;
 
                     // clamp y
-                    if (cursorLn > textBuff.numLines-1)
-                        cursorLn = textBuff.numLines-1;
+                    if (selectionLn > textBuff.numLines-1)
+                        selectionLn = textBuff.numLines-1;
 
                     // clamp x
-                    size_t maxCols = textBuff.lines[cursorLn]->numCols;
-                    if (cursorCol > maxCols)
-                        cursorCol = maxCols;
+                    size_t maxCols = textBuff.lines[selectionLn]->numCols;
+                    if (selectionCol > maxCols)
+                        selectionCol = maxCols;
                     
-                    cursorColMax = cursorCol;
+                    UpdateSelection(&selectionBeginCol, &selectionBeginLn, &selectionEndCol, &selectionEndLn, cursorLn, cursorCol, selectionLn, selectionCol);
+                }
+            } break;
+
+            case SDL_MOUSEBUTTONUP: {
+                if (e.button.button == SDL_BUTTON_LEFT) {
+                    mouseHeld = false;
                 }
             } break;
 
@@ -298,32 +351,30 @@ int main(void) {
             case SDL_TEXTINPUT: {
                 HandleTextInput(&textBuff, &cursorColMax, &cursorCol, &cursorLn, &e.text);
                 CursorAutoscroll(&topLine, cursorLn, sRows);
+                selectionCol = cursorCol;
+                selectionLn = cursorLn;
+                UpdateSelection(&selectionBeginCol, &selectionBeginLn, &selectionEndCol, &selectionEndLn, cursorLn, cursorCol, selectionLn, selectionCol);
             } break;
 
             case SDL_KEYDOWN: {
                 HandleKeyDown(&textBuff, &cursorColMax, &cursorCol, &cursorLn, &e.key);
                 CursorAutoscroll(&topLine, cursorLn, sRows);
+                // on enter or delete, number of lines can change -> recalculate margin
                 CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
+                selectionCol = cursorCol;
+                selectionLn = cursorLn;
+                UpdateSelection(&selectionBeginCol, &selectionBeginLn, &selectionEndCol, &selectionEndLn, cursorLn, cursorCol, selectionLn, selectionCol);
             } break;
         }
 
+        // draw bg
         SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteBG), 255));
         SDL_CHECK_CODE(SDL_RenderClear(renderer));
-        SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteW1))); // cursor
-        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteFG), 255)); // font
 
-        // draw cursor
-        if (cursorLn >= topLine && cursorLn < topLine+sRows) {
-            SDL_Rect const r = {
-                .x = cursorCol * charWidth + leftMarginEnd,
-                .y = (cursorLn-topLine) * charHeight,
-                .w = 2,
-                .h = charHeight,
-            };
-            SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
-        }
-        
         // TODO: this loop will change when syntax highlighting is added
+        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteHL), 255)); // selection highlight
+        SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteFG))); // font
+
         for (size_t y = topLine;
             y <= topLine+sRows && y < textBuff.numLines;
             ++y)
@@ -340,6 +391,19 @@ int main(void) {
             // draw line
             sx = leftMarginEnd;
             for (size_t x = 0; x < textBuff.lines[y]->numCols; ++x) {
+                // text select
+                if ((selectionEndCol != x || selectionEndLn != y) &&
+                    isBetween(y, x, selectionBeginLn, selectionBeginCol, selectionEndLn, selectionEndCol))
+                {
+                    SDL_Rect const r = {
+                        .x = sx,
+                        .y = sy,
+                        .w = charWidth,
+                        .h = charHeight,
+                    };
+                    SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &r));
+                }
+                
                 // draw character
                 char ch = textBuff.lines[y]->buff[x];
                 if (ASCII_PRINTABLE_MIN <= ch && ch <= ASCII_PRINTABLE_MAX) {
@@ -348,6 +412,30 @@ int main(void) {
                 // else handle non printable chars
                 sx += charWidth;
             }
+        }
+
+        // draw cursor
+        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteR1), 255)); // cursor
+        if (cursorLn >= topLine && cursorLn < topLine+sRows) {
+            SDL_Rect const r = {
+                .x = cursorCol * charWidth + leftMarginEnd,
+                .y = (cursorLn-topLine) * charHeight,
+                .w = 2,
+                .h = charHeight,
+            };
+            SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
+        }
+
+        // draw selection cursor
+        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteG1), 255)); // cursor
+        if (selectionLn >= topLine && selectionLn < topLine+sRows) {
+            SDL_Rect const r = {
+                .x = selectionCol * charWidth + leftMarginEnd,
+                .y = (selectionLn-topLine) * charHeight,
+                .w = 2,
+                .h = charHeight,
+            };
+            SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
         }
 
         SDL_RenderPresent(renderer);
