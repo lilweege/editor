@@ -155,11 +155,20 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCo
     }
 }
 
-static void UpdateScreenSize(SDL_Renderer* renderer, int fontCharWidth, int fontCharHeight, size_t* sRows, size_t* sCols) {
+static void GetScreenSize(SDL_Renderer* renderer, int fontCharWidth, int fontCharHeight, size_t* sRows, size_t* sCols) {
     int sw, sh;
     SDL_GetRendererOutputSize(renderer, &sw, &sh);
     *sRows = sh / fontCharHeight;
     *sCols = sw / fontCharWidth;
+}
+
+static void CursorAutoscroll(size_t* topLine, size_t cursorLn, size_t sRows) {
+    if (cursorLn < *topLine) {
+        *topLine = cursorLn;
+    }
+    else if (cursorLn > *topLine+(sRows-1)) {
+        *topLine = cursorLn-(sRows-1);
+    }
 }
 
 int main(void) {
@@ -175,16 +184,17 @@ int main(void) {
         stbi_load(FontFilename, &imgWidth, &imgHeight, &imgComps, STBI_rgb_alpha));
 
     
+    Uint32 const
     #if SDL_BYTEORDER == SDL_BIG_ENDIAN
-        Uint32 rmask = 0xff000000,
-            gmask = 0x00ff0000,
-            bmask = 0x0000ff00,
-            amask = 0x000000ff;
+        rmask = 0xff000000,
+        gmask = 0x00ff0000,
+        bmask = 0x0000ff00,
+        amask = 0x000000ff;
     #else // little endian, like x86
-        Uint32 const rmask = 0x000000ff,
-            gmask = 0x0000ff00,
-            bmask = 0x00ff0000,
-            amask = 0xff000000;
+        rmask = 0x000000ff,
+        gmask = 0x0000ff00,
+        bmask = 0x00ff0000,
+        amask = 0xff000000;
     #endif
 
     int const depth = 32;
@@ -192,18 +202,17 @@ int main(void) {
 
     SDL_Surface* fontSurface = STBI_CHECK_PTR(
         SDL_CreateRGBSurfaceFrom((void*)imgData, imgWidth, imgHeight,
-            depth, pitch,
-            rmask, gmask, bmask, amask));
+            depth, pitch, rmask, gmask, bmask, amask));
     SDL_Texture* fontTexture = SDL_CHECK_PTR(
         SDL_CreateTextureFromSurface(renderer, fontSurface));
     SDL_FreeSurface(fontSurface);
 
+    
     int const fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
     int const fontCharHeight = imgHeight;
-    size_t cursorColMax = 0, cursorCol = 0, cursorLn = 0, topLine = 0;
     TextBuffer textBuff = TextBufferNew(8);
-    size_t sRows, sCols;
-    UpdateScreenSize(renderer, fontCharWidth*FontScale, fontCharHeight*FontScale, &sRows, &sCols);
+    size_t cursorColMax = 0, cursorCol = 0, cursorLn = 0, topLine = 0, sRows, sCols;
+    GetScreenSize(renderer, fontCharWidth*FontScale, fontCharHeight*FontScale, &sRows, &sCols);
 
     for (bool quit = false; !quit;) {
         SDL_Event e;
@@ -224,16 +233,18 @@ int main(void) {
 
             case SDL_WINDOWEVENT: { // https://wiki.libsdl.org/SDL_WindowEvent
                 if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
-                    UpdateScreenSize(renderer, fontCharWidth*FontScale, fontCharHeight*FontScale, &sRows, &sCols);
+                    GetScreenSize(renderer, fontCharWidth*FontScale, fontCharHeight*FontScale, &sRows, &sCols);
                 }
             } break;
 
             case SDL_TEXTINPUT: {
                 HandleTextInput(&textBuff, &cursorColMax, &cursorCol, &cursorLn, &e.text);
+                CursorAutoscroll(&topLine, cursorLn, sRows);
             } break;
 
             case SDL_KEYDOWN: {
                 HandleKeyDown(&textBuff, &cursorColMax, &cursorCol, &cursorLn, &e.key);
+                CursorAutoscroll(&topLine, cursorLn, sRows);
             } break;
         }
 
@@ -246,8 +257,6 @@ int main(void) {
         // this loop will change when syntax highlighting is added
         SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteW1))); // cursor
         SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteFG), 255)); // font
-
-        // TODO: cursor autoscroll
 
         // render
         for (size_t y = topLine;
