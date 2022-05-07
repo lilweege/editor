@@ -1,14 +1,10 @@
 #include "textbuffer.h"
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <string.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-#include "error.h"
 #include <SDL2/SDL.h>
 
+#include "error.h"
 #include "config.h"
 
 
@@ -44,7 +40,7 @@ static void HandleKeyDown(TextBuffer* tb, size_t* cursorColMax, size_t* cursorCo
     // keys: backspace, delete, enter, home, end, pgup, pgdown, left/right, up/down, tab
     // mods: ctrl, shift, alt
 
-    // SDL_Keymod mod = e.key.keysym.mod;
+    // SDL_Keymod mod = event->keysym.mod;
     // TODO: mod and text selection will add second position to consider
     // TODO: slight optimizations, when splitting the current line, choose smaller half to reinsert
     // do this for enter, backspace, delete
@@ -179,7 +175,7 @@ static void CalculateLeftMargin(size_t* leftMarginBegin, size_t* leftMarginEnd, 
     *leftMarginEnd = *leftMarginBegin + LineMarginRight * charWidth;
 }
 
-static void ScreenToCursor(size_t* cursorX, size_t* cursorY, size_t mouseX, size_t mouseY, TextBuffer const* textBuff, size_t leftMarginEnd, int charWidth, int charHeight) {
+static void ScreenToCursor(size_t* cursorX, size_t* cursorY, size_t mouseX, size_t mouseY, TextBuffer const* textBuff, size_t leftMarginEnd, size_t topLine, int charWidth, int charHeight) {
     // offset due to line numbers
     if (mouseX < leftMarginEnd) mouseX = 0;
     else mouseX -= leftMarginEnd;
@@ -187,7 +183,7 @@ static void ScreenToCursor(size_t* cursorX, size_t* cursorY, size_t mouseX, size
     mouseX += charWidth / 2;
 
     *cursorX = mouseX / charWidth;
-    *cursorY = mouseY / charHeight;
+    *cursorY = topLine + mouseY / charHeight;
 
     // clamp y
     if (*cursorY > textBuff->numLines-1)
@@ -304,7 +300,7 @@ int main(void) {
                 
                 // mouse drag selection
                 if (mouseHeld) {
-                    ScreenToCursor(&cursorCol, &cursorLn, e.button.x, e.button.y, &textBuff, leftMarginEnd, charWidth, charHeight);
+                    ScreenToCursor(&cursorCol, &cursorLn, e.button.x, e.button.y, &textBuff, leftMarginEnd, topLine, charWidth, charHeight);
                     UpdateSelection(&selectionBeginCol, &selectionBeginLn, &selectionEndCol, &selectionEndLn, cursorLn, cursorCol, selectionLn, selectionCol);
                 }
 
@@ -316,7 +312,7 @@ int main(void) {
                     assert(e.button.x >= 0);
                     assert(e.button.y >= 0);
 
-                    ScreenToCursor(&cursorCol, &cursorLn, e.button.x, e.button.y, &textBuff, leftMarginEnd, charWidth, charHeight);
+                    ScreenToCursor(&cursorCol, &cursorLn, e.button.x, e.button.y, &textBuff, leftMarginEnd, topLine, charWidth, charHeight);
                     cursorColMax = cursorCol;
 
                     selectionCol = cursorCol;
@@ -348,6 +344,7 @@ int main(void) {
             } break;
 
             case SDL_TEXTINPUT: {
+                mouseHeld = false;
                 HandleTextInput(&textBuff, &cursorColMax, &cursorCol, &cursorLn, &e.text);
                 CursorAutoscroll(&topLine, cursorLn, sRows);
                 selectionCol = cursorCol;
@@ -356,6 +353,7 @@ int main(void) {
             } break;
 
             case SDL_KEYDOWN: {
+                mouseHeld = false;
                 HandleKeyDown(&textBuff, &cursorColMax, &cursorCol, &cursorLn, &e.key);
                 CursorAutoscroll(&topLine, cursorLn, sRows);
                 // on enter or delete, number of lines can change -> recalculate margin
