@@ -179,6 +179,26 @@ static void CalculateLeftMargin(size_t* leftMarginBegin, size_t* leftMarginEnd, 
     *leftMarginEnd = *leftMarginBegin + LineMarginRight * charWidth;
 }
 
+static void ScreenToCursor(size_t* cursorX, size_t* cursorY, size_t mouseX, size_t mouseY, TextBuffer const* textBuff, size_t leftMarginEnd, int charWidth, int charHeight) {
+    // offset due to line numbers
+    if (mouseX < leftMarginEnd) mouseX = 0;
+    else mouseX -= leftMarginEnd;
+    // round forward or back to nearest char
+    mouseX += charWidth / 2;
+
+    *cursorX = mouseX / charWidth;
+    *cursorY = mouseY / charHeight;
+
+    // clamp y
+    if (*cursorY > textBuff->numLines-1)
+        *cursorY = textBuff->numLines-1;
+
+    // clamp x
+    size_t maxCols = textBuff->lines[*cursorY]->numCols;
+    if (*cursorX > maxCols)
+        *cursorX = maxCols;
+}
+
 static bool lexLe(size_t y0, size_t x0, size_t y1, size_t x1) {
     // (y0,x0) <=_lex (y1,x1)
     return (y0 < y1) || (y0 == y1 && x0 <= x1);
@@ -272,6 +292,7 @@ int main(void) {
             } break;
 
             case SDL_MOUSEMOTION: {
+                // update cursor style
                 if (currentMouseCursor != mouseCursorIBeam && (size_t)e.motion.x > leftMarginEnd) {
                     currentMouseCursor = mouseCursorIBeam;
                     SDL_SetCursor(mouseCursorIBeam);
@@ -280,48 +301,26 @@ int main(void) {
                     currentMouseCursor = mouseCursorArrow;
                     SDL_SetCursor(mouseCursorArrow);
                 }
+                
+                // mouse drag selection
+                if (mouseHeld) {
+                    ScreenToCursor(&cursorCol, &cursorLn, e.button.x, e.button.y, &textBuff, leftMarginEnd, charWidth, charHeight);
+                    UpdateSelection(&selectionBeginCol, &selectionBeginLn, &selectionEndCol, &selectionEndLn, cursorLn, cursorCol, selectionLn, selectionCol);
+                }
+
             } break;
 
             case SDL_MOUSEBUTTONDOWN: {
-                // TODO: mouse drag selection
                 if (e.button.button == SDL_BUTTON_LEFT) {
                     mouseHeld = true;
                     assert(e.button.x >= 0);
                     assert(e.button.y >= 0);
 
-                    size_t cx = e.button.x;
-                    // offset due to line numbers
-                    if (cx < leftMarginEnd) cx = 0;
-                    else cx -= leftMarginEnd;
-                    // round forward or back to nearest char
-                    cx += charWidth / 2;
+                    ScreenToCursor(&cursorCol, &cursorLn, e.button.x, e.button.y, &textBuff, leftMarginEnd, charWidth, charHeight);
+                    cursorColMax = cursorCol;
 
-                    // cursorCol = cx / charWidth;
-                    // cursorLn = e.button.y / charHeight;
-
-                    // // clamp y
-                    // if (cursorLn > textBuff.numLines-1)
-                    //     cursorLn = textBuff.numLines-1;
-
-                    // // clamp x
-                    // size_t maxCols = textBuff.lines[cursorLn]->numCols;
-                    // if (cursorCol > maxCols)
-                    //     cursorCol = maxCols;
-                    
-                    // cursorColMax = cursorCol;
-
-                    selectionCol = cx / charWidth;
-                    selectionLn = e.button.y / charHeight;
-
-                    // clamp y
-                    if (selectionLn > textBuff.numLines-1)
-                        selectionLn = textBuff.numLines-1;
-
-                    // clamp x
-                    size_t maxCols = textBuff.lines[selectionLn]->numCols;
-                    if (selectionCol > maxCols)
-                        selectionCol = maxCols;
-                    
+                    selectionCol = cursorCol;
+                    selectionLn = cursorLn;
                     UpdateSelection(&selectionBeginCol, &selectionBeginLn, &selectionEndCol, &selectionEndLn, cursorLn, cursorCol, selectionLn, selectionCol);
                 }
             } break;
