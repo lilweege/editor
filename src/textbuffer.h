@@ -1,6 +1,13 @@
 #ifndef TEXTBUFFER_H_
 #define TEXTBUFFER_H_
 
+// ideas for a better structure:
+// https://en.wikipedia.org/wiki/Rope_%28data_structure%29
+// https://en.wikipedia.org/wiki/Gap_buffer
+// https://en.wikipedia.org/wiki/Piece_table
+// https://code.visualstudio.com/blogs/2018/03/23/text-buffer-reimplementation
+// https://github.com/microsoft/vscode/tree/main/src/vs/editor/common/model/pieceTreeTextBuffer
+
 #include <stdbool.h>
 #include <stddef.h>
 

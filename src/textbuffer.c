@@ -53,8 +53,8 @@ void LineBufferInsertStr(LineBuffer** lbP, const char* s, size_t n, size_t idx) 
 
 void LineBufferErase(LineBuffer** lbP, size_t n, size_t idx) {
     // erase
+    memmove((*lbP)->buff+idx, (*lbP)->buff+idx+n, (*lbP)->numCols-idx-n);
     (*lbP)->numCols -= n;
-    memmove((*lbP)->buff+idx, (*lbP)->buff+idx+n, (*lbP)->numCols-idx);
     // shrink
     size_t newMax = (*lbP)->maxCols;
     while ((*lbP)->numCols < newMax * LB_SHRINK_THRESH && newMax > LB_MIN)
@@ -105,7 +105,7 @@ void TextBufferInsert(TextBuffer* tbP, size_t n, size_t idx) {
 void TextBufferErase(TextBuffer* tbP, size_t n, size_t idx) {
     for (size_t i = idx; i < idx+n; ++i)
         LineBufferFree(tbP->lines[i]);
-    memmove(tbP->lines+idx, tbP->lines+idx+n, (tbP->numLines-idx) * sizeof(LineBuffer*));
+    memmove(tbP->lines+idx, tbP->lines+idx+n, (tbP->numLines-idx-n) * sizeof(LineBuffer*));
     tbP->numLines -= n;
     size_t newMax = tbP->maxLines;
     while (tbP->numLines < newMax * TB_SHRINK_THRESH && newMax > TB_MIN)
