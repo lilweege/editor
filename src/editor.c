@@ -254,9 +254,9 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
     }
 }
 
-static void GetScreenSize(SDL_Renderer* renderer, int charWidth, int charHeight, size_t* sRows, size_t* sCols) {
+static void GetScreenSize(SDL_Window* window, int charWidth, int charHeight, size_t* sRows, size_t* sCols) {
     int sw, sh;
-    SDL_GetRendererOutputSize(renderer, &sw, &sh);
+    SDL_GetWindowSize(window, &sw, &sh);
     *sRows = sh / charHeight;
     *sCols = sw / charWidth;
 }
@@ -282,7 +282,7 @@ static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuf
     else mouseX -= leftMarginEnd;
     // round forward or back to nearest char
     mouseX += charWidth / 2;
-    mouseY += topLine;
+    mouseY += topLine * charHeight;
 
     cursor->curPos.col = mouseX / charWidth;
     cursor->curPos.ln = mouseY / charHeight;
@@ -349,7 +349,7 @@ int main(void) {
     size_t topLine = 0, sRows, sCols, leftMarginBegin, leftMarginEnd;
 
     bool mouseHeld = false;
-    GetScreenSize(renderer, charWidth, charHeight, &sRows, &sCols);
+    GetScreenSize(window, charWidth, charHeight, &sRows, &sCols);
     CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
 
     // main loop
@@ -414,7 +414,7 @@ int main(void) {
 
             case SDL_WINDOWEVENT: { // https://wiki.libsdl.org/SDL_WindowEvent
                 if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
-                    GetScreenSize(renderer, charWidth, charHeight, &sRows, &sCols);
+                    GetScreenSize(window, charWidth, charHeight, &sRows, &sCols);
                 }
             } break;
 
