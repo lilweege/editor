@@ -1,5 +1,4 @@
 #include "textbuffer.h"
-#include <SDL2/SDL_mouse.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -19,6 +18,66 @@ typedef struct {
     size_t colMax;
 } Cursor;
 
+
+static bool lexLe(size_t y0, size_t x0, size_t y1, size_t x1) {
+    // (y0,x0) <=_lex (y1,x1)
+    return (y0 < y1) || (y0 == y1 && x0 <= x1);
+}
+
+static bool isBetween(size_t ln, size_t col, size_t y0, size_t x0, size_t y1, size_t x1) {
+    // (y0,x0) <= (ln,col) <= (y1,x1)
+    return lexLe(y0, x0, ln, col) && lexLe(ln, col, y1, x1);
+}
+
+static bool hasSelection(Cursor* cursor) {
+    return cursor->selBegin.col != cursor->selEnd.col ||
+            cursor->selBegin.ln != cursor->selEnd.ln;
+}
+
+static void UpdateSelection(Cursor* cursor) {
+    if (lexLe(cursor->curPos.ln, cursor->curPos.col, cursor->curSel.ln, cursor->curSel.col)) {
+        cursor->selBegin.col = cursor->curPos.col;
+        cursor->selBegin.ln = cursor->curPos.ln;
+        cursor->selEnd.col = cursor->curSel.col;
+        cursor->selEnd.ln = cursor->curSel.ln;
+    }
+    else {
+        cursor->selBegin.col = cursor->curSel.col;
+        cursor->selBegin.ln = cursor->curSel.ln;
+        cursor->selEnd.col = cursor->curPos.col;
+        cursor->selEnd.ln = cursor->curPos.ln;
+    }
+}
+
+static void EraseBetween(TextBuffer* tb, CursorPos begin, CursorPos end) {
+    if (begin.ln == end.ln) {
+        LineBufferErase(tb->lines+begin.ln, end.col - begin.col, begin.col);
+    }
+    else {
+        assert(end.ln > begin.ln);
+        LineBufferErase(tb->lines+begin.ln,
+            tb->lines[begin.ln]->numCols - begin.col,
+            begin.col);
+        LineBufferInsertStr(tb->lines+begin.ln,
+            tb->lines[end.ln]->buff + end.col,
+            tb->lines[end.ln]->numCols - end.col,
+            tb->lines[begin.ln]->numCols);
+        TextBufferErase(tb, end.ln-begin.ln, begin.ln+1);
+    }
+}
+
+static void EraseSelection(TextBuffer* tb, Cursor* cursor) {
+    EraseBetween(tb, cursor->selBegin, cursor->selEnd);
+    cursor->curPos.ln = cursor->selBegin.ln;
+    size_t cols = tb->lines[cursor->curPos.ln]->numCols;
+    cursor->curPos.col = cursor->selBegin.col;
+    if (cursor->curPos.col > cols)
+        cursor->curPos.col = cols;
+
+    cursor->curSel.col = cursor->curPos.col;
+    cursor->curSel.ln = cursor->curPos.ln;
+    UpdateSelection(cursor);
+}
 
 static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, int fontCharWidth, int fontCharHeight, char ch, int x, int y, float scl) {
     size_t idx = ch - ASCII_PRINTABLE_MIN;
@@ -40,6 +99,9 @@ static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, in
 }
 
 static void HandleTextInput(TextBuffer* tb, Cursor* cursor, SDL_TextInputEvent const* event) {
+    if (hasSelection(cursor)) {
+        EraseSelection(tb, cursor);
+    }
     const char* s = event->text;
     size_t n = strlen(s);
     LineBufferInsertStr(tb->lines+cursor->curPos.ln, s, n, cursor->curPos.col);
@@ -58,6 +120,9 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
     // TODO: slight optimizations, when splitting the current line, choose smaller half to reinsert
     // do this for enter, backspace, delete
     if (code == SDLK_RETURN) {
+        if (hasSelection(cursor)) {
+            EraseSelection(tb, cursor);
+        }
         TextBufferInsert(tb, 1, cursor->curPos.ln + 1);
         LineBufferInsertStr(tb->lines + cursor->curPos.ln + 1,
             tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
@@ -71,37 +136,61 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
         cursor->colMax = cursor->curPos.col;
     }
     else if (code == SDLK_TAB) {
-        LineBufferInsertChr(tb->lines+cursor->curPos.ln, ' ', TabSize, cursor->curPos.col);
-        cursor->curPos.col += TabSize;
-        cursor->colMax = cursor->curPos.col;
+        // TODO: shift mod -> dedent
+        if (hasSelection(cursor)) {
+            for (size_t line = cursor->selBegin.ln;
+                line <= cursor->selEnd.ln;
+                ++line)
+            {
+                LineBufferInsertChr(tb->lines+line, ' ', TabSize, 0);
+            }
+            cursor->curPos.col += TabSize;
+            cursor->curSel.col += TabSize;
+            UpdateSelection(cursor);
+        }
+        else {
+            LineBufferInsertChr(tb->lines+cursor->curPos.ln, ' ', TabSize, cursor->curPos.col);
+            cursor->curPos.col += TabSize;
+            cursor->colMax = cursor->curPos.col;
+        }
     }
     else if (code == SDLK_BACKSPACE) {
-        if (cursor->curPos.col >= 1) {
-            cursor->curPos.col -= 1;
-            LineBufferErase(tb->lines+cursor->curPos.ln, 1, cursor->curPos.col);
+        if (hasSelection(cursor)) {
+            EraseSelection(tb, cursor);
         }
-        else if (cursor->curPos.ln != 0) {
-            size_t oldCols = tb->lines[cursor->curPos.ln-1]->numCols;
-            LineBufferInsertStr(tb->lines+cursor->curPos.ln-1,
-                tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
-                tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
-                tb->lines[cursor->curPos.ln-1]->numCols);
-            cursor->curPos.col = oldCols;
-            TextBufferErase(tb, 1, cursor->curPos.ln);
-            cursor->curPos.ln -= 1;
+        else {
+            if (cursor->curPos.col >= 1) {
+                cursor->curPos.col -= 1;
+                LineBufferErase(tb->lines+cursor->curPos.ln, 1, cursor->curPos.col);
+            }
+            else if (cursor->curPos.ln != 0) {
+                size_t oldCols = tb->lines[cursor->curPos.ln-1]->numCols;
+                LineBufferInsertStr(tb->lines+cursor->curPos.ln-1,
+                    tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
+                    tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
+                    tb->lines[cursor->curPos.ln-1]->numCols);
+                cursor->curPos.col = oldCols;
+                TextBufferErase(tb, 1, cursor->curPos.ln);
+                cursor->curPos.ln -= 1;
+            }
         }
         cursor->colMax = cursor->curPos.col;
     }
     else if (code == SDLK_DELETE) {
-        if (cursor->curPos.col + 1 <= tb->lines[cursor->curPos.ln]->numCols) {
-            LineBufferErase(tb->lines+cursor->curPos.ln, 1, cursor->curPos.col);
+        if (hasSelection(cursor)) {
+            EraseSelection(tb, cursor);
         }
-        else if (cursor->curPos.ln != tb->numLines-1) {
-            LineBufferInsertStr(tb->lines+cursor->curPos.ln,
-                tb->lines[cursor->curPos.ln+1]->buff,
-                tb->lines[cursor->curPos.ln+1]->numCols,
-                tb->lines[cursor->curPos.ln]->numCols);
-            TextBufferErase(tb, 1, cursor->curPos.ln+1);
+        else {
+            if (cursor->curPos.col + 1 <= tb->lines[cursor->curPos.ln]->numCols) {
+                LineBufferErase(tb->lines+cursor->curPos.ln, 1, cursor->curPos.col);
+            }
+            else if (cursor->curPos.ln != tb->numLines-1) {
+                LineBufferInsertStr(tb->lines+cursor->curPos.ln,
+                    tb->lines[cursor->curPos.ln+1]->buff,
+                    tb->lines[cursor->curPos.ln+1]->numCols,
+                    tb->lines[cursor->curPos.ln]->numCols);
+                TextBufferErase(tb, 1, cursor->curPos.ln+1);
+            }
         }
         cursor->colMax = cursor->curPos.col;
     }
@@ -208,30 +297,6 @@ static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuf
         cursor->curPos.col = maxCols;
 }
 
-static bool lexLe(size_t y0, size_t x0, size_t y1, size_t x1) {
-    // (y0,x0) <=_lex (y1,x1)
-    return (y0 < y1) || (y0 == y1 && x0 <= x1);
-}
-
-static bool isBetween(size_t ln, size_t col, size_t y0, size_t x0, size_t y1, size_t x1) {
-    // (y0,x0) <= (ln,col) <= (y1,x1)
-    return lexLe(y0, x0, ln, col) && lexLe(ln, col, y1, x1);
-}
-
-static void UpdateSelection(Cursor* cursor) {
-    if (lexLe(cursor->curPos.ln, cursor->curPos.col, cursor->curSel.ln, cursor->curSel.col)) {
-        cursor->selBegin.col = cursor->curPos.col;
-        cursor->selBegin.ln = cursor->curPos.ln;
-        cursor->selEnd.col = cursor->curSel.col;
-        cursor->selEnd.ln = cursor->curSel.ln;
-    }
-    else {
-        cursor->selBegin.col = cursor->curSel.col;
-        cursor->selBegin.ln = cursor->curSel.ln;
-        cursor->selEnd.col = cursor->curPos.col;
-        cursor->selEnd.ln = cursor->curPos.ln;
-    }
-}
 
 int main(void) {
     SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
@@ -357,10 +422,6 @@ int main(void) {
                 mouseHeld = false;
                 HandleTextInput(&textBuff, &cursor, &e.text);
                 CursorAutoscroll(&topLine, cursor.curPos.ln, sRows);
-                
-                cursor.curSel.col = cursor.curPos.col;
-                cursor.curSel.ln = cursor.curPos.ln;
-                UpdateSelection(&cursor);
             } break;
 
             case SDL_KEYDOWN: {
@@ -369,10 +430,6 @@ int main(void) {
                 CursorAutoscroll(&topLine, cursor.curPos.ln, sRows);
                 // on enter or delete, number of lines can change -> recalculate margin
                 CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
-                
-                cursor.curSel.col = cursor.curPos.col;
-                cursor.curSel.ln = cursor.curPos.ln;
-                UpdateSelection(&cursor);
             } break;
         }
 
@@ -436,8 +493,7 @@ int main(void) {
         }
 
         // draw selection cursor
-        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteG1), 255)); // cursor
-        if (cursor.curSel.ln >= topLine && cursor.curSel.ln < topLine+sRows) {
+        if (hasSelection(&cursor) && cursor.curSel.ln >= topLine && cursor.curSel.ln < topLine+sRows) {
             SDL_Rect const r = {
                 .x = cursor.curSel.col * charWidth + leftMarginEnd,
                 .y = (cursor.curSel.ln-topLine) * charHeight,
