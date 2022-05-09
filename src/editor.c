@@ -16,6 +16,7 @@ typedef struct {
     CursorPos curPos, curSel;
     CursorPos selBegin, selEnd;
     size_t colMax;
+    bool shiftSelecting, mouseSelecting;
 } Cursor;
 
 
@@ -29,12 +30,18 @@ static bool isBetween(size_t ln, size_t col, size_t y0, size_t x0, size_t y1, si
     return lexLe(y0, x0, ln, col) && lexLe(ln, col, y1, x1);
 }
 
-static bool hasSelection(Cursor* cursor) {
+
+static bool isSelecting(Cursor const* cursor) {
+    return cursor->mouseSelecting || cursor->shiftSelecting;
+}
+
+static bool hasSelection(Cursor const* cursor) {
     return cursor->selBegin.col != cursor->selEnd.col ||
             cursor->selBegin.ln != cursor->selEnd.ln;
 }
 
 static void UpdateSelection(Cursor* cursor) {
+    // set selBegin and selEnd, determined by curPos and curSel
     if (lexLe(cursor->curPos.ln, cursor->curPos.col, cursor->curSel.ln, cursor->curSel.col)) {
         cursor->selBegin.col = cursor->curPos.col;
         cursor->selBegin.ln = cursor->curPos.ln;
@@ -47,6 +54,17 @@ static void UpdateSelection(Cursor* cursor) {
         cursor->selEnd.col = cursor->curPos.col;
         cursor->selEnd.ln = cursor->curPos.ln;
     }
+}
+
+static void StopSelecting(Cursor* cursor) {
+    cursor->mouseSelecting = false;
+    cursor->shiftSelecting = false;
+    cursor->curSel.col = cursor->curPos.col;
+    cursor->curSel.ln = cursor->curPos.ln;
+    cursor->selBegin.col = cursor->curPos.col;
+    cursor->selBegin.ln = cursor->curPos.ln;
+    cursor->selEnd.col = cursor->curPos.col;
+    cursor->selEnd.ln = cursor->curPos.ln;
 }
 
 static void EraseBetween(TextBuffer* tb, CursorPos begin, CursorPos end) {
@@ -73,10 +91,7 @@ static void EraseSelection(TextBuffer* tb, Cursor* cursor) {
     cursor->curPos.col = cursor->selBegin.col;
     if (cursor->curPos.col > cols)
         cursor->curPos.col = cols;
-
-    cursor->curSel.col = cursor->curPos.col;
-    cursor->curSel.ln = cursor->curPos.ln;
-    UpdateSelection(cursor);
+    StopSelecting(cursor);
 }
 
 static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, int fontCharWidth, int fontCharHeight, char ch, int x, int y, float scl) {
@@ -194,63 +209,108 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
         }
         cursor->colMax = cursor->curPos.col;
     }
-    else if (code == SDLK_LEFT) {
-        if (cursor->curPos.col >= 1) {
-            cursor->curPos.col -= 1;
-        }
-        else if (cursor->curPos.ln >= 1) {
-            cursor->curPos.ln -= 1;
-            cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
-        }
-        cursor->colMax = cursor->curPos.col;
-    }
-    else if (code == SDLK_RIGHT) {
-        if (cursor->curPos.col + 1 <= tb->lines[cursor->curPos.ln]->numCols) {
-            cursor->curPos.col += 1;
-        }
-        else if (cursor->curPos.ln + 1 < tb->numLines) {
-            cursor->curPos.col = 0;
-            cursor->curPos.ln += 1;
-        }
-        cursor->colMax = cursor->curPos.col;
-    }
-    else if (code == SDLK_UP) {
-        if (cursor->curPos.ln >= 1) {
-            cursor->curPos.ln -= 1;
-            if (cursor->curPos.col < cursor->colMax)
-                cursor->curPos.col = cursor->colMax;
-            size_t cols = tb->lines[cursor->curPos.ln]->numCols;
-            if (cursor->curPos.col > cols)
-                cursor->curPos.col = cols;
+    else if (code == SDLK_LEFT ||
+            code == SDLK_RIGHT ||
+            code == SDLK_UP ||
+            code == SDLK_DOWN ||
+            code == SDLK_HOME ||
+            code == SDLK_END)
+    {
+        // directional keys
+        // TODO: mod & KMOD_CTRL
+        if (hasSelection(cursor))
+            cursor->shiftSelecting = true;
+        bool wasSelecting = cursor->shiftSelecting;
+        if (mod & KMOD_SHIFT) {
+            if (!cursor->shiftSelecting) {
+                cursor->curSel.col = cursor->curPos.col;
+                cursor->curSel.ln = cursor->curPos.ln;
+                UpdateSelection(cursor);
+                cursor->shiftSelecting = true;
+            }
         }
         else {
-            cursor->curPos.ln = 0;
-            cursor->curPos.col = 0;
-            cursor->colMax = cursor->curPos.col;
+            StopSelecting(cursor);
+        }
+        wasSelecting = wasSelecting && !isSelecting(cursor);
+
+        switch (code) {
+            case SDLK_LEFT: {
+                if (wasSelecting) {
+                    cursor->curPos.col = cursor->selBegin.col;
+                    cursor->curPos.ln = cursor->selBegin.ln;
+                }
+                else {
+                    if (cursor->curPos.col >= 1) {
+                        cursor->curPos.col -= 1;
+                    }
+                    else if (cursor->curPos.ln >= 1) {
+                        cursor->curPos.ln -= 1;
+                        cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
+                    }
+                }
+                cursor->colMax = cursor->curPos.col;
+            } break;
+            case SDLK_RIGHT: {
+                if (wasSelecting) {
+                    cursor->curPos.col = cursor->selEnd.col;
+                    cursor->curPos.ln = cursor->selEnd.ln;
+                }
+                else {
+                    if (cursor->curPos.col + 1 <= tb->lines[cursor->curPos.ln]->numCols) {
+                        cursor->curPos.col += 1;
+                    }
+                    else if (cursor->curPos.ln + 1 < tb->numLines) {
+                        cursor->curPos.col = 0;
+                        cursor->curPos.ln += 1;
+                    }
+                }
+                cursor->colMax = cursor->curPos.col;
+            } break;
+            case SDLK_UP: {
+                if (cursor->curPos.ln >= 1) {
+                    cursor->curPos.ln -= 1;
+                    if (cursor->curPos.col < cursor->colMax)
+                        cursor->curPos.col = cursor->colMax;
+                    size_t cols = tb->lines[cursor->curPos.ln]->numCols;
+                    if (cursor->curPos.col > cols)
+                        cursor->curPos.col = cols;
+                }
+                else {
+                    cursor->curPos.ln = 0;
+                    cursor->curPos.col = 0;
+                    cursor->colMax = cursor->curPos.col;
+                }
+            } break;
+            case SDLK_DOWN: {
+                if (cursor->curPos.ln + 1 < tb->numLines) {
+                    cursor->curPos.ln += 1;
+                    if (cursor->curPos.col < cursor->colMax)
+                        cursor->curPos.col = cursor->colMax;
+                    size_t cols = tb->lines[cursor->curPos.ln]->numCols;
+                    if (cursor->curPos.col > cols)
+                        cursor->curPos.col = cols;
+                }
+                else {
+                    cursor->curPos.ln = tb->numLines-1;
+                    cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
+                    cursor->colMax = cursor->curPos.col;
+                }
+            } break;
+            case SDLK_HOME: {
+                cursor->curPos.col = 0;
+                cursor->colMax = cursor->curPos.col;
+            } break;
+            case SDLK_END: {
+                cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
+                cursor->colMax = cursor->curPos.col;
+            } break;
+            default: assert(0 && "Unreachable"); break;
         }
     }
-    else if (code == SDLK_DOWN) {
-        if (cursor->curPos.ln + 1 < tb->numLines) {
-            cursor->curPos.ln += 1;
-            if (cursor->curPos.col < cursor->colMax)
-                cursor->curPos.col = cursor->colMax;
-            size_t cols = tb->lines[cursor->curPos.ln]->numCols;
-            if (cursor->curPos.col > cols)
-                cursor->curPos.col = cols;
-        }
-        else {
-            cursor->curPos.ln = tb->numLines-1;
-            cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
-            cursor->colMax = cursor->curPos.col;
-        }
-    }
-    else if (code == SDLK_END) {
-        cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
-        cursor->colMax = cursor->curPos.col;
-    }
-    else if (code == SDLK_HOME) {
-        cursor->curPos.col = 0;
-        cursor->colMax = cursor->curPos.col;
+
+    if (isSelecting(cursor)) {
+        UpdateSelection(cursor);
     }
 }
 
@@ -348,7 +408,6 @@ int main(void) {
     Cursor cursor = {0};
     size_t topLine = 0, sRows, sCols, leftMarginBegin, leftMarginEnd;
 
-    bool mouseHeld = false;
     GetScreenSize(window, charWidth, charHeight, &sRows, &sCols);
     CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
 
@@ -374,7 +433,7 @@ int main(void) {
                 }
                 
                 // mouse drag selection
-                if (mouseHeld) {
+                if (cursor.mouseSelecting) {
                     ScreenToCursor(&cursor, e.button.x, e.button.y, &textBuff, leftMarginEnd, topLine, charWidth, charHeight);
                     UpdateSelection(&cursor);
                 }
@@ -383,7 +442,7 @@ int main(void) {
 
             case SDL_MOUSEBUTTONDOWN: {
                 if (e.button.button == SDL_BUTTON_LEFT) {
-                    mouseHeld = true;
+                    cursor.mouseSelecting = true;
                     assert(e.button.x >= 0);
                     assert(e.button.y >= 0);
 
@@ -398,7 +457,7 @@ int main(void) {
 
             case SDL_MOUSEBUTTONUP: {
                 if (e.button.button == SDL_BUTTON_LEFT) {
-                    mouseHeld = false;
+                    cursor.mouseSelecting = false;
                 }
             } break;
 
@@ -419,13 +478,11 @@ int main(void) {
             } break;
 
             case SDL_TEXTINPUT: {
-                mouseHeld = false;
                 HandleTextInput(&textBuff, &cursor, &e.text);
                 CursorAutoscroll(&topLine, cursor.curPos.ln, sRows);
             } break;
 
             case SDL_KEYDOWN: {
-                mouseHeld = false;
                 HandleKeyDown(&textBuff, &cursor, &e.key);
                 CursorAutoscroll(&topLine, cursor.curPos.ln, sRows);
                 // on enter or delete, number of lines can change -> recalculate margin
