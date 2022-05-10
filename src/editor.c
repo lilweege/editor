@@ -19,6 +19,69 @@ typedef struct {
     bool shiftSelecting, mouseSelecting;
 } Cursor;
 
+static bool isWhitespace(char c) {
+    return c <= ' ' || c > '~';
+}
+
+static CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur) {
+    // assumes cur is a valid pos
+    bool seenDelim = false;
+    // wrap if at end of line
+    if (cur.col == tb->lines[cur.ln]->numCols) {
+        // return if past end of buff
+        if (cur.ln+1 >= tb->numLines) {
+            return (CursorPos) { .ln=tb->numLines-1, .col=tb->lines[tb->numLines-1]->numCols };
+        }
+        cur.ln += 1;
+        cur.col = 0;
+        seenDelim = true;
+    }
+    
+    // this block logic is way simpler than others, mostly because handling all that is pain
+    size_t col = cur.col;
+    for (; col < tb->lines[cur.ln]->numCols; ++col) {
+        char c = tb->lines[cur.ln]->buff[col];
+        if (isWhitespace(c)) {
+            seenDelim = true;
+        }
+        else if (seenDelim) {
+            break;
+        }
+    }
+    
+    return (CursorPos) { .ln=cur.ln, .col=col };
+}
+
+static CursorPos TextBuffPrevBlockPos(TextBuffer const* tb, CursorPos cur) {
+    // assumes cur is a valid pos
+    bool seenDelim = false;
+    // wrap if at end of line
+    if (cur.col == 0) {
+        // return if underflow
+        if (cur.ln == 0) {
+            return (CursorPos) { .ln=0, .col=0 };
+        }
+        cur.ln -= 1;
+        cur.col = tb->lines[cur.ln]->numCols;
+        seenDelim = true;
+    }
+    
+    bool seenText = false;
+    size_t n = tb->lines[cur.ln]->numCols;
+    size_t col = cur.col-1;
+    for (; col < n; --col) {
+        char c = tb->lines[cur.ln]->buff[col];
+        if (isWhitespace(c)) {
+            if (seenText)
+                break;
+            seenDelim = true;
+        }
+        else {
+            seenText = true;
+        }
+    }
+    return (CursorPos) { .ln=cur.ln, .col=col+1 };
+}
 
 static bool lexLe(size_t y0, size_t x0, size_t y1, size_t x1) {
     // (y0,x0) <=_lex (y1,x1)
@@ -67,7 +130,7 @@ static void StopSelecting(Cursor* cursor) {
     cursor->selEnd.ln = cursor->curPos.ln;
 }
 
-static void EraseBetween(TextBuffer* tb, CursorPos begin, CursorPos end) {
+static void EraseBetween(TextBuffer* tb, Cursor* cursor, CursorPos begin, CursorPos end) {
     if (begin.ln == end.ln) {
         LineBufferErase(tb->lines+begin.ln, end.col - begin.col, begin.col);
     }
@@ -82,16 +145,17 @@ static void EraseBetween(TextBuffer* tb, CursorPos begin, CursorPos end) {
             tb->lines[begin.ln]->numCols);
         TextBufferErase(tb, end.ln-begin.ln, begin.ln+1);
     }
-}
 
-static void EraseSelection(TextBuffer* tb, Cursor* cursor) {
-    EraseBetween(tb, cursor->selBegin, cursor->selEnd);
-    cursor->curPos.ln = cursor->selBegin.ln;
+    cursor->curPos.ln = begin.ln;
     size_t cols = tb->lines[cursor->curPos.ln]->numCols;
-    cursor->curPos.col = cursor->selBegin.col;
+    cursor->curPos.col = begin.col;
     if (cursor->curPos.col > cols)
         cursor->curPos.col = cols;
     StopSelecting(cursor);
+}
+
+static void EraseSelection(TextBuffer* tb, Cursor* cursor) {
+    EraseBetween(tb, cursor, cursor->selBegin, cursor->selEnd);
 }
 
 static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, int fontCharWidth, int fontCharHeight, char ch, int x, int y, float scl) {
@@ -119,6 +183,7 @@ static void HandleTextInput(TextBuffer* tb, Cursor* cursor, SDL_TextInputEvent c
     }
     const char* s = event->text;
     size_t n = strlen(s);
+    // NOTE: does not handle s with any newline
     LineBufferInsertStr(tb->lines+cursor->curPos.ln, s, n, cursor->curPos.col);
     cursor->curPos.col += n;
     cursor->colMax = cursor->curPos.col;
@@ -131,6 +196,8 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
 
     SDL_Keycode code = event->keysym.sym;
     SDL_Keymod mod = event->keysym.mod;
+    bool ctrlPressed = mod & KMOD_CTRL,
+        shiftPressed = mod & KMOD_SHIFT;
     // TODO: mod and text selection will add second position to consider
     // TODO: slight optimizations, when splitting the current line, choose smaller half to reinsert
     // do this for enter, backspace, delete
@@ -173,6 +240,11 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
         if (hasSelection(cursor)) {
             EraseSelection(tb, cursor);
         }
+        else if (ctrlPressed) {
+            EraseBetween(tb, cursor,
+                TextBuffPrevBlockPos(tb, cursor->curPos),
+                cursor->curPos);
+        }
         else {
             if (cursor->curPos.col >= 1) {
                 cursor->curPos.col -= 1;
@@ -194,6 +266,11 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
     else if (code == SDLK_DELETE) {
         if (hasSelection(cursor)) {
             EraseSelection(tb, cursor);
+        }
+        else if (ctrlPressed) {
+            EraseBetween(tb, cursor,
+                cursor->curPos,
+                TextBuffNextBlockPos(tb, cursor->curPos));
         }
         else {
             if (cursor->curPos.col + 1 <= tb->lines[cursor->curPos.ln]->numCols) {
@@ -217,11 +294,10 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
             code == SDLK_END)
     {
         // directional keys
-        // TODO: mod & KMOD_CTRL
         if (hasSelection(cursor))
             cursor->shiftSelecting = true;
         bool wasSelecting = cursor->shiftSelecting;
-        if (mod & KMOD_SHIFT) {
+        if (shiftPressed) {
             if (!cursor->shiftSelecting) {
                 cursor->curSel.col = cursor->curPos.col;
                 cursor->curSel.ln = cursor->curPos.ln;
@@ -240,6 +316,11 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
                     cursor->curPos.col = cursor->selBegin.col;
                     cursor->curPos.ln = cursor->selBegin.ln;
                 }
+                else if (ctrlPressed) {
+                    CursorPos prvPos = TextBuffPrevBlockPos(tb, cursor->curPos);
+                    cursor->curPos.col = prvPos.col;
+                    cursor->curPos.ln = prvPos.ln;
+                }
                 else {
                     if (cursor->curPos.col >= 1) {
                         cursor->curPos.col -= 1;
@@ -255,6 +336,11 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
                 if (wasSelecting) {
                     cursor->curPos.col = cursor->selEnd.col;
                     cursor->curPos.ln = cursor->selEnd.ln;
+                }
+                else if (ctrlPressed) {
+                    CursorPos nxtPos = TextBuffNextBlockPos(tb, cursor->curPos);
+                    cursor->curPos.col = nxtPos.col;
+                    cursor->curPos.ln = nxtPos.ln;
                 }
                 else {
                     if (cursor->curPos.col + 1 <= tb->lines[cursor->curPos.ln]->numCols) {
