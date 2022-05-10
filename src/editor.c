@@ -523,7 +523,9 @@ int main(int argc, char** argv) {
                 
                 // mouse drag selection
                 if (cursor.mouseSelecting) {
-                    ScreenToCursor(&cursor, e.button.x, e.button.y, &textBuff, leftMarginEnd, topLine, charWidth, charHeight);
+                    size_t mouseX = e.motion.x < 0 ? 0 : e.motion.x;
+                    size_t mouseY = e.motion.y < 0 ? 0 : e.motion.y;
+                    ScreenToCursor(&cursor, mouseX, mouseY, &textBuff, leftMarginEnd, topLine, charWidth, charHeight);
                     UpdateSelection(&cursor);
                 }
 
@@ -532,10 +534,10 @@ int main(int argc, char** argv) {
             case SDL_MOUSEBUTTONDOWN: {
                 if (e.button.button == SDL_BUTTON_LEFT) {
                     cursor.mouseSelecting = true;
-                    assert(e.button.x >= 0);
-                    assert(e.button.y >= 0);
+                    size_t mouseX = e.button.x < 0 ? 0 : e.button.x;
+                    size_t mouseY = e.button.y < 0 ? 0 : e.button.y;
 
-                    ScreenToCursor(&cursor, e.button.x, e.button.y, &textBuff, leftMarginEnd, topLine, charWidth, charHeight);
+                    ScreenToCursor(&cursor, mouseX, mouseY, &textBuff, leftMarginEnd, topLine, charWidth, charHeight);
                     cursor.colMax = cursor.curPos.col;
                     
                     cursor.curSel.col = cursor.curPos.col;
