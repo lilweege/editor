@@ -1,11 +1,10 @@
 #include "textbuffer.h"
+#include "error.h"
+#include "config.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <SDL2/SDL.h>
-
-#include "error.h"
-#include "config.h"
 
 
 typedef struct {
@@ -161,17 +160,17 @@ static void EraseSelection(TextBuffer* tb, Cursor* cursor) {
 static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, int fontCharWidth, int fontCharHeight, char ch, int x, int y, float scl) {
     size_t idx = ch - ASCII_PRINTABLE_MIN;
     SDL_Rect sourceRect = {
-        .x = idx*fontCharWidth,
+        .x = (int)(idx * fontCharWidth),
         .y = 0,
-        .w = fontCharWidth,
-        .h = fontCharHeight,
+        .w = (int)fontCharWidth,
+        .h = (int)fontCharHeight,
     };
 
     SDL_Rect screenRect = {
         .x = x,
         .y = y,
-        .w = fontCharWidth * scl,
-        .h = fontCharHeight * scl,
+        .w = (int)(fontCharWidth * scl),
+        .h = (int)(fontCharHeight * scl),
     };
     // TODO: switch to opengl so this can be batch rendered
     SDL_CHECK_CODE(SDL_RenderCopy(renderer, fontTexture, &sourceRect, &screenRect));
@@ -418,8 +417,8 @@ static void CursorAutoscroll(size_t* topLine, size_t cursorLn, size_t sRows) {
 
 static void CalculateLeftMargin(size_t* leftMarginBegin, size_t* leftMarginEnd, size_t charWidth, size_t numLines) {
     // numLines should never be zero so log is fine
-    *leftMarginBegin = LineMarginLeft * charWidth + ((int)log10(numLines)+1) * charWidth;
-    *leftMarginEnd = *leftMarginBegin + LineMarginRight * charWidth;
+    *leftMarginBegin = (size_t)((LineMarginLeft + (int)log10((float)numLines) + 1) * charWidth);
+    *leftMarginEnd = (size_t)(*leftMarginBegin + LineMarginRight * charWidth);
 }
 
 static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuffer const* textBuff, size_t leftMarginEnd, size_t topLine, int charWidth, int charHeight) {
@@ -444,11 +443,15 @@ static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuf
 }
 
 
-int main(void) {
+int main(int argc, char** argv) {
+    (void) argc; (void) argv;
     SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
 
     SDL_Window* const window = SDL_CHECK_PTR(
-        SDL_CreateWindow(ProgramTitle, 0, 0, InitialWindowWidth, InitialWindowHeight, SDL_WINDOW_RESIZABLE));
+        SDL_CreateWindow(ProgramTitle,
+            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+            InitialWindowWidth, InitialWindowHeight,
+            SDL_WINDOW_RESIZABLE));
     SDL_Renderer* const renderer = SDL_CHECK_PTR(
         SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED));
 
@@ -488,8 +491,8 @@ int main(void) {
 
     int const fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
     int const fontCharHeight = imgHeight;
-    int const charWidth = fontCharWidth * FontScale;
-    int const charHeight = fontCharHeight * FontScale;
+    int const charWidth = (int)(fontCharWidth * FontScale);
+    int const charHeight = (int)(fontCharHeight * FontScale);
     TextBuffer textBuff = TextBufferNew(8);
     Cursor cursor = {0};
     size_t topLine = 0, sRows, sCols, leftMarginBegin, leftMarginEnd;
@@ -583,22 +586,22 @@ int main(void) {
         // TODO: this loop will change when syntax highlighting is added
         SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteHL), 255)); // selection highlight
         SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteFG))); // font
-
+        
         for (size_t y = topLine;
             y <= topLine+sRows && y < textBuff.numLines;
             ++y)
         {
-            size_t const sy = (y-topLine) * charHeight;
+            int const sy = (int)((y-topLine) * charHeight);
 
             // draw line number
-            size_t sx = leftMarginBegin;
+            int sx = (int)leftMarginBegin;
             for (size_t lineNum = y+1; lineNum > 0; lineNum /= 10) {
                 sx -= charWidth;
                 RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, lineNum % 10 + '0', sx, sy, FontScale);
             }
 
             // draw line
-            sx = leftMarginEnd;
+            sx = (int)leftMarginEnd;
             for (size_t x = 0; x < textBuff.lines[y]->numCols; ++x) {
                 // text select
                 if ((cursor.selEnd.col != x || cursor.selEnd.ln != y) &&
@@ -627,8 +630,8 @@ int main(void) {
         SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteR1), 255)); // cursor
         if (cursor.curPos.ln >= topLine && cursor.curPos.ln < topLine+sRows) {
             SDL_Rect const r = {
-                .x = cursor.curPos.col * charWidth + leftMarginEnd,
-                .y = (cursor.curPos.ln-topLine) * charHeight,
+                .x = (int)(cursor.curPos.col * charWidth + leftMarginEnd),
+                .y = (int)((cursor.curPos.ln-topLine) * charHeight),
                 .w = 2,
                 .h = charHeight,
             };
@@ -638,8 +641,8 @@ int main(void) {
         // draw selection cursor
         if (hasSelection(&cursor) && cursor.curSel.ln >= topLine && cursor.curSel.ln < topLine+sRows) {
             SDL_Rect const r = {
-                .x = cursor.curSel.col * charWidth + leftMarginEnd,
-                .y = (cursor.curSel.ln-topLine) * charHeight,
+                .x = (int)(cursor.curSel.col * charWidth + leftMarginEnd),
+                .y = (int)((cursor.curSel.ln-topLine) * charHeight),
                 .w = 2,
                 .h = charHeight,
             };
@@ -649,4 +652,5 @@ int main(void) {
         SDL_RenderPresent(renderer);
     }
     TextBufferFree(textBuff);
+    return 0;
 }
