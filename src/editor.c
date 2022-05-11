@@ -5,6 +5,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <SDL2/SDL.h>
+#include <stdlib.h>
 
 
 typedef struct {
@@ -37,9 +38,12 @@ static CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur) {
     }
     
     // this block logic is way simpler than others, mostly because handling all that is pain
-    size_t col = cur.col;
-    for (; col < tb->lines[cur.ln]->numCols; ++col) {
-        char c = tb->lines[cur.ln]->buff[col];
+    
+    for (size_t n = tb->lines[cur.ln]->numCols;
+        cur.col < n;
+        ++cur.col)
+    {
+        char c = tb->lines[cur.ln]->buff[cur.col];
         if (isWhitespace(c)) {
             seenDelim = true;
         }
@@ -48,12 +52,11 @@ static CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur) {
         }
     }
     
-    return (CursorPos) { .ln=cur.ln, .col=col };
+    return cur;
 }
 
 static CursorPos TextBuffPrevBlockPos(TextBuffer const* tb, CursorPos cur) {
     // assumes cur is a valid pos
-    bool seenDelim = false;
     // wrap if at end of line
     if (cur.col == 0) {
         // return if underflow
@@ -62,24 +65,25 @@ static CursorPos TextBuffPrevBlockPos(TextBuffer const* tb, CursorPos cur) {
         }
         cur.ln -= 1;
         cur.col = tb->lines[cur.ln]->numCols;
-        seenDelim = true;
     }
     
     bool seenText = false;
-    size_t n = tb->lines[cur.ln]->numCols;
-    size_t col = cur.col-1;
-    for (; col < n; --col) {
-        char c = tb->lines[cur.ln]->buff[col];
+    --cur.col;
+    for (size_t n = tb->lines[cur.ln]->numCols;
+        cur.col < n;
+        --cur.col)
+    {
+        char c = tb->lines[cur.ln]->buff[cur.col];
         if (isWhitespace(c)) {
             if (seenText)
                 break;
-            seenDelim = true;
         }
         else {
             seenText = true;
         }
     }
-    return (CursorPos) { .ln=cur.ln, .col=col+1 };
+    ++cur.col;
+    return cur;
 }
 
 static bool lexLe(size_t y0, size_t x0, size_t y1, size_t x1) {
@@ -181,23 +185,23 @@ static void HandleTextInput(TextBuffer* tb, Cursor* cursor, SDL_TextInputEvent c
         EraseSelection(tb, cursor);
     }
     const char* s = event->text;
+    printf("TEXT INPUT: %s\n", s);
     size_t n = strlen(s);
     // NOTE: does not handle s with any newline
     LineBufferInsertStr(tb->lines+cursor->curPos.ln, s, n, cursor->curPos.col);
     cursor->curPos.col += n;
     cursor->colMax = cursor->curPos.col;
+    StopSelecting(cursor);
 }
 
 static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent const* event) {
     // TODO: cursor, text selection, clipboard, zoom, undo/redo, line move, multi-cursor
     // keys: backspace, delete, enter, home, end, pgup, pgdown, left/right, up/down, tab
     // mods: ctrl, shift, alt
-
     SDL_Keycode code = event->keysym.sym;
     SDL_Keymod mod = event->keysym.mod;
     bool ctrlPressed = mod & KMOD_CTRL,
         shiftPressed = mod & KMOD_SHIFT;
-    // TODO: mod and text selection will add second position to consider
     // TODO: slight optimizations, when splitting the current line, choose smaller half to reinsert
     // do this for enter, backspace, delete
     if (code == SDLK_RETURN) {
@@ -291,10 +295,10 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
             code == SDLK_DOWN ||
             code == SDLK_HOME ||
             code == SDLK_END)
-    {
-        // directional keys
-        if (hasSelection(cursor))
+    { // directional keys
+        if (hasSelection(cursor)) {
             cursor->shiftSelecting = true;
+        }
         bool wasSelecting = cursor->shiftSelecting;
         if (shiftPressed) {
             if (!cursor->shiftSelecting) {
@@ -391,6 +395,98 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
                 cursor->colMax = cursor->curPos.col;
             } break;
             default: assert(0 && "Unreachable"); break;
+        }
+    }
+    // TODO: ctrl+o,s,d,f,z,y
+    else if (code == SDLK_a && ctrlPressed) {
+        cursor->curSel.col = 0;
+        cursor->curSel.ln = 0;
+        cursor->curPos.ln = tb->numLines-1;
+        cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
+        UpdateSelection(cursor);
+    }
+    else if ((code == SDLK_c || code == SDLK_x) && ctrlPressed) {
+        // cut/copy
+        size_t n = cursor->selEnd.col;
+        for (size_t ln = cursor->selBegin.ln;
+            ln < cursor->selEnd.ln;
+            ++ln)
+        {
+            n += tb->lines[ln]->numCols+1;
+        }
+        n -= cursor->selBegin.col;
+        char* buff = malloc(n+1);
+        if (buff == NULL) {
+            PANIC_HERE("MALLOC", "Could not allocate clipboard buffer");
+        }
+        if (cursor->selBegin.ln == cursor->selEnd.ln) {
+            memcpy(buff,
+                tb->lines[cursor->selBegin.ln]->buff + cursor->selBegin.col,
+                cursor->selEnd.col - cursor->selBegin.col);
+        }
+        else {
+            size_t i = tb->lines[cursor->selBegin.ln]->numCols - cursor->selBegin.col;
+            memcpy(buff, tb->lines[cursor->selBegin.ln]->buff + cursor->selBegin.col, i);
+            buff[i++] = '\n';
+            for (size_t ln = cursor->selBegin.ln+1;
+                ln < cursor->selEnd.ln; ++ln)
+            {
+                size_t sz = tb->lines[ln]->numCols;
+                memcpy(buff+i, tb->lines[ln]->buff, sz);
+                i += sz;
+                buff[i++] = '\n';
+            }
+            memcpy(buff+i, tb->lines[cursor->selEnd.ln]->buff, cursor->selEnd.col);
+        }
+        buff[n] = 0;
+        SDL_SetClipboardText(buff);
+        free(buff);
+        if (code == SDLK_x) { // cut
+            EraseSelection(tb, cursor);
+        }
+    }
+    else if (code == SDLK_v && ctrlPressed) {
+        // paste
+        if (SDL_HasClipboardText()) {
+            if (hasSelection(cursor)) {
+                EraseSelection(tb, cursor);
+            }
+            char* clip = SDL_GetClipboardText();
+            assert(clip != NULL);
+            if (clip[0] == '\0') {
+                SDL_ERROR_HERE();
+            }
+            size_t lineIdx[1024]; // FIXME
+            size_t nLines = 0;
+            size_t n = 0;
+            for (; clip[n] != '\0'; ++n) {
+                if (clip[n] == '\n') {
+                    lineIdx[nLines++] = n;
+                    assert(nLines < 1024);
+                }
+            }
+            lineIdx[nLines] = n;
+            TextBufferInsert(tb, nLines, cursor->curPos.ln+1);
+            if (nLines > 0) {
+                // split line
+                LineBufferInsertStr(tb->lines + cursor->curPos.ln + nLines,
+                    tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
+                    tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
+                    0);
+                LineBufferErase(tb->lines + cursor->curPos.ln,
+                    tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
+                    cursor->curPos.col);
+            }
+            LineBufferInsertStr(tb->lines+(cursor->curPos.ln),
+                clip, lineIdx[0], cursor->curPos.col);
+            cursor->curPos.col += lineIdx[0];
+            for (size_t i = 0; i < nLines; ++i) {
+                size_t sz = lineIdx[i+1]-lineIdx[i]-1;
+                LineBufferInsertStr(tb->lines+(++cursor->curPos.ln),
+                    clip+lineIdx[i]+1, sz, 0);
+                cursor->curPos.col = sz;
+            }
+            SDL_free(clip);
         }
     }
 
@@ -623,7 +719,10 @@ int main(int argc, char** argv) {
                 if (ASCII_PRINTABLE_MIN <= ch && ch <= ASCII_PRINTABLE_MAX) {
                     RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, FontScale);
                 }
-                // else handle non printable chars
+                else {
+                    // else handle non printable chars
+                    assert(0 && "unrenderable character");
+                }
                 sx += charWidth;
             }
         }

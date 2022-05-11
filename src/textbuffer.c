@@ -94,7 +94,10 @@ static bool TextBufferRealloc(TextBuffer* tbP, size_t newMax) {
 }
 
 void TextBufferInsert(TextBuffer* tbP, size_t n, size_t idx) {
-    if (tbP->numLines+1 > tbP->maxLines * TB_GROW_THRESH && !TextBufferRealloc(tbP, tbP->maxLines << 1))
+    size_t newMax = tbP->maxLines;
+    while (tbP->numLines + n > newMax * TB_GROW_THRESH)
+        newMax <<= 1;
+    if (newMax > tbP->maxLines && !TextBufferRealloc(tbP, newMax))
         PANIC_HERE("MALLOC", "Could not grow TextBuffer");
     memmove(tbP->lines+idx+n, tbP->lines+idx, (tbP->numLines-idx) * sizeof(LineBuffer*));
     tbP->numLines += n;
