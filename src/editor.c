@@ -21,6 +21,16 @@ typedef struct {
     bool shiftSelecting, mouseSelecting;
 } Cursor;
 
+
+static void IncreaseFontScale() {
+    FontScale *= FontScaleMultiplier;
+}
+
+static void DecreaseFontScale() {
+    FontScale /= FontScaleMultiplier;
+}
+
+
 static bool isWhitespace(char c) {
     return c <= ' ' || c > '~';
 }
@@ -491,10 +501,10 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
         }
     }
     else if ((code == SDLK_EQUALS || code == SDLK_KP_PLUS) && ctrlPressed) {
-        FontScale *= 1.1f;
+        IncreaseFontScale();
     }
     else if ((code == SDLK_MINUS || code == SDLK_KP_MINUS) && ctrlPressed) {
-        FontScale /= 1.1f;
+        DecreaseFontScale();
     }
 
     if (isSelecting(cursor)) {
@@ -615,6 +625,8 @@ int main(int argc, char** argv) {
 
         Uint32 startTick = SDL_GetTicks();
         bool needsRedraw = false;
+        bool updateMargin = false;
+        bool updateScroll = false;
 
         // handle events
         SDL_Event e;
@@ -673,7 +685,21 @@ int main(int argc, char** argv) {
             case SDL_MOUSEWHEEL: {
                 // TODO: horizontal scrolling
                 Sint32 dy = e.wheel.y;
-                if ((dy > 0 && topLine >= (size_t)dy) || // up
+
+                if (SDL_GetModState() & KMOD_CTRL) {
+                    if (dy != 0) { // either
+                        if (dy > 0) { // zoom in
+                            IncreaseFontScale();
+                        }
+                        else { // zoom out
+                            DecreaseFontScale();
+                        }
+                        updateScroll = true;
+                        updateMargin = true;
+                        needsRedraw = true;
+                    }
+                }
+                else if ((dy > 0 && topLine >= (size_t)dy) || // up
                     (dy < 0 && topLine + (-dy) < textBuff.numLines)) // down
                 {
                     topLine -= dy;
@@ -689,16 +715,17 @@ int main(int argc, char** argv) {
             } break;
 
             case SDL_TEXTINPUT: {
-                HandleTextInput(&textBuff, &cursor, &e.text);
-                CursorAutoscroll(&topLine, cursor.curPos.ln, sRows);
-                needsRedraw = true;
+                if (!(SDL_GetModState() & (KMOD_CTRL | KMOD_ALT))) {
+                    HandleTextInput(&textBuff, &cursor, &e.text);
+                    updateScroll = true;
+                    needsRedraw = true;
+                }
             } break;
 
             case SDL_KEYDOWN: {
                 HandleKeyDown(&textBuff, &cursor, &e.key);
-                CursorAutoscroll(&topLine, cursor.curPos.ln, sRows);
-                // on enter or delete, number of lines can change -> recalculate margin
-                CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
+                updateScroll = true;
+                updateMargin = true;
                 needsRedraw = true;
             } break;
         }
@@ -706,14 +733,17 @@ int main(int argc, char** argv) {
         if (needsRedraw) {
 
             while (fontCharHeight * FontScale > sh)
-                FontScale /= 1.1f;
+                DecreaseFontScale();
             while ((int)(fontCharWidth * FontScale) == 0 || (int)(fontCharHeight * FontScale) == 0)
-                FontScale *= 1.1f;
+                IncreaseFontScale();
             charWidth = (int)(fontCharWidth * FontScale);
             charHeight = (int)(fontCharHeight * FontScale);
             sCols = sw / charWidth;
             sRows = sh / charHeight;
-            CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
+            if (updateScroll)
+                CursorAutoscroll(&topLine, cursor.curPos.ln, sRows);
+            if (updateMargin)
+                CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
 
             // draw bg
             SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteBG), 255));

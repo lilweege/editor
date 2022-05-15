@@ -27,6 +27,8 @@ const int PaletteC2 = 0x95e1d2;
 const int PaletteW2 = 0xdddddd;
 
 float FontScale = 2.0f;
+const float FontScaleMultiplier = 1.2f;
+
 const float LineMarginLeft = 0.5f;
 const float LineMarginRight = 1.0f;
 
