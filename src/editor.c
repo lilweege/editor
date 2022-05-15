@@ -512,13 +512,23 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
     }
 }
 
-static void CursorAutoscroll(size_t* topLine, size_t cursorLn, size_t sRows) {
-    if (cursorLn < *topLine) {
-        *topLine = cursorLn;
+
+static void ClampBetween(size_t* x, size_t l, size_t n) {
+    if (*x > l) {
+        *x = l;
     }
-    else if (cursorLn > *topLine+(sRows-1)) {
-        *topLine = cursorLn-(sRows-1);
+    else if (l > *x+n) {
+        *x = l-n;
     }
+}
+
+static void CursorAutoscroll(
+    size_t* firstLine, size_t* firstColumn,
+    size_t cursorLn, size_t cursorCol,
+    size_t numRows, size_t numCols)
+{
+    ClampBetween(firstLine, cursorLn, numRows-1);
+    ClampBetween(firstColumn, cursorCol, numCols-1);
 }
 
 static void CalculateLeftMargin(size_t* leftMarginBegin, size_t* leftMarginEnd, size_t charWidth, size_t numLines) {
@@ -527,13 +537,13 @@ static void CalculateLeftMargin(size_t* leftMarginBegin, size_t* leftMarginEnd, 
     *leftMarginEnd = (size_t)(*leftMarginBegin + LineMarginRight * charWidth);
 }
 
-static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuffer const* textBuff, size_t leftMarginEnd, size_t topLine, int charWidth, int charHeight) {
+static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuffer const* textBuff, size_t leftMarginEnd, size_t firstColumn, size_t firstLine, int charWidth, int charHeight) {
     // offset due to line numbers
     if (mouseX < leftMarginEnd) mouseX = 0;
     else mouseX -= leftMarginEnd;
     // round forward or back to nearest char
-    mouseX += charWidth / 2;
-    mouseY += topLine * charHeight;
+    mouseX += firstColumn * charWidth + charWidth / 2;
+    mouseY += firstLine * charHeight;
 
     cursor->curPos.col = mouseX / charWidth;
     cursor->curPos.ln = mouseY / charHeight;
@@ -612,11 +622,10 @@ int main(int argc, char** argv) {
     int sw, sh;
     TextBuffer textBuff = TextBufferNew(8);
     Cursor cursor = {0};
-    size_t topLine = 0, sRows, sCols, leftMarginBegin, leftMarginEnd;
+    size_t firstLine = 0, firstColumn = 0;
+    size_t sRows, sCols, leftMarginBegin, leftMarginEnd;
 
     SDL_GetWindowSize(window, &sw, &sh);
-    sCols = sw / charWidth;
-    sRows = sh / charHeight;
     CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
 
     // main loop
@@ -653,7 +662,7 @@ int main(int argc, char** argv) {
                 if (cursor.mouseSelecting) {
                     size_t mouseX = e.motion.x < 0 ? 0 : e.motion.x;
                     size_t mouseY = e.motion.y < 0 ? 0 : e.motion.y;
-                    ScreenToCursor(&cursor, mouseX, mouseY, &textBuff, leftMarginEnd, topLine, charWidth, charHeight);
+                    ScreenToCursor(&cursor, mouseX, mouseY, &textBuff, leftMarginEnd, firstColumn, firstLine, charWidth, charHeight);
                     UpdateSelection(&cursor);
                     needsRedraw = true;
                 }
@@ -665,7 +674,7 @@ int main(int argc, char** argv) {
                     size_t mouseX = e.button.x < 0 ? 0 : e.button.x;
                     size_t mouseY = e.button.y < 0 ? 0 : e.button.y;
 
-                    ScreenToCursor(&cursor, mouseX, mouseY, &textBuff, leftMarginEnd, topLine, charWidth, charHeight);
+                    ScreenToCursor(&cursor, mouseX, mouseY, &textBuff, leftMarginEnd, firstColumn, firstLine, charWidth, charHeight);
                     cursor.colMax = cursor.curPos.col;
                     
                     cursor.curSel.col = cursor.curPos.col;
@@ -684,10 +693,15 @@ int main(int argc, char** argv) {
 
             case SDL_MOUSEWHEEL: {
                 // TODO: horizontal scrolling
-                Sint32 dy = e.wheel.y;
+                Sint32 dx = e.wheel.x, dy = e.wheel.y;
+                dx *= ScrollXMultiplier;
+                dy *= ScrollYMultiplier;
+                if (InvertScrollX) dx *= -1;
+                if (InvertScrollY) dy *= -1;
 
-                if (SDL_GetModState() & KMOD_CTRL) {
-                    if (dy != 0) { // either
+                // vertical scrolling
+                if (dy) {
+                    if (SDL_GetModState() & KMOD_CTRL) {
                         if (dy > 0) { // zoom in
                             IncreaseFontScale();
                         }
@@ -698,12 +712,21 @@ int main(int argc, char** argv) {
                         updateMargin = true;
                         needsRedraw = true;
                     }
+                    else if ((dy > 0 && firstLine >= (size_t)dy) || // up
+                             (dy < 0 && firstLine + (-dy) < textBuff.numLines)) // down
+                    {
+                        firstLine -= dy;
+                        needsRedraw = true;
+                    }
                 }
-                else if ((dy > 0 && topLine >= (size_t)dy) || // up
-                    (dy < 0 && topLine + (-dy) < textBuff.numLines)) // down
-                {
-                    topLine -= dy;
-                    needsRedraw = true;
+                // horizontal scrolling
+                if (dx) {
+                    if ((dx > 0) || // right
+                        (dx < 0 && firstColumn >= (size_t)(-dx))) // left
+                    {
+                        firstColumn += dx;
+                        needsRedraw = true;
+                    }
                 }
             } break;
 
@@ -732,18 +755,25 @@ int main(int argc, char** argv) {
 
         if (needsRedraw) {
 
-            while (fontCharHeight * FontScale > sh)
+            while (fontCharHeight * FontScale > sh) {
                 DecreaseFontScale();
-            while ((int)(fontCharWidth * FontScale) == 0 || (int)(fontCharHeight * FontScale) == 0)
+            }
+            while ((int)(fontCharWidth * FontScale) == 0 || (int)(fontCharHeight * FontScale) == 0) {
                 IncreaseFontScale();
+            }
             charWidth = (int)(fontCharWidth * FontScale);
             charHeight = (int)(fontCharHeight * FontScale);
+            if (updateMargin) {
+                CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
+            }
             sCols = sw / charWidth;
             sRows = sh / charHeight;
-            if (updateScroll)
-                CursorAutoscroll(&topLine, cursor.curPos.ln, sRows);
-            if (updateMargin)
-                CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
+            size_t pxDiff = leftMarginEnd / charWidth;
+            size_t const nCols = sCols > pxDiff ? sCols - pxDiff : 0;
+            size_t const nRows = sRows;
+            if (updateScroll) {
+                CursorAutoscroll(&firstLine, &firstColumn, cursor.curPos.ln, cursor.curPos.col, nRows, nCols);
+            }
 
             // draw bg
             SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteBG), 255));
@@ -753,11 +783,11 @@ int main(int argc, char** argv) {
             SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteHL), 255)); // selection highlight
             SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteFG))); // font
             
-            for (size_t y = topLine;
-                y <= topLine+sRows && y < textBuff.numLines;
+            for (size_t y = firstLine;
+                y <= firstLine+nRows && y < textBuff.numLines;
                 ++y)
             {
-                int const sy = (int)((y-topLine) * charHeight);
+                int const sy = (int)((y-firstLine) * charHeight);
 
                 // draw line number
                 int sx = (int)leftMarginBegin;
@@ -768,7 +798,10 @@ int main(int argc, char** argv) {
 
                 // draw line
                 sx = (int)leftMarginEnd;
-                for (size_t x = 0; x < textBuff.lines[y]->numCols; ++x) {
+                for (size_t x = firstColumn;
+                    x <= firstColumn+nCols && x < textBuff.lines[y]->numCols;
+                    ++x)
+                {
                     // text select
                     if ((cursor.selEnd.col != x || cursor.selEnd.ln != y) &&
                         isBetween(y, x, cursor.selBegin.ln, cursor.selBegin.col, cursor.selEnd.ln, cursor.selEnd.col))
@@ -798,21 +831,26 @@ int main(int argc, char** argv) {
 
             // draw cursor
             SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteR1), 255)); // cursor
-            if (cursor.curPos.ln >= topLine && cursor.curPos.ln < topLine+sRows) {
+            if (cursor.curPos.ln >= firstLine && cursor.curPos.ln < firstLine+nRows &&
+                cursor.curPos.col >= firstColumn && cursor.curPos.col <= firstColumn+nCols)
+            {
                 SDL_Rect const r = {
-                    .x = (int)(cursor.curPos.col * charWidth + leftMarginEnd),
-                    .y = (int)((cursor.curPos.ln-topLine) * charHeight),
+                    .x = (int)((cursor.curPos.col-firstColumn) * charWidth + leftMarginEnd),
+                    .y = (int)((cursor.curPos.ln-firstLine) * charHeight),
                     .w = 2,
                     .h = charHeight,
                 };
                 SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
             }
-
+            
             // draw selection cursor
-            if (hasSelection(&cursor) && cursor.curSel.ln >= topLine && cursor.curSel.ln < topLine+sRows) {
+            if (hasSelection(&cursor) &&
+                cursor.curSel.ln >= firstLine && cursor.curSel.ln < firstLine+nRows &&
+                cursor.curSel.col >= firstColumn && cursor.curSel.col <= firstColumn+nCols)
+            {
                 SDL_Rect const r = {
-                    .x = (int)(cursor.curSel.col * charWidth + leftMarginEnd),
-                    .y = (int)((cursor.curSel.ln-topLine) * charHeight),
+                    .x = (int)((cursor.curSel.col-firstColumn) * charWidth + leftMarginEnd),
+                    .y = (int)((cursor.curSel.ln-firstLine) * charHeight),
                     .w = 2,
                     .h = charHeight,
                 };

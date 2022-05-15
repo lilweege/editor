@@ -1,6 +1,7 @@
 #ifndef CONFIG_H_
 #define CONFIG_H_
 
+#include <stdbool.h>
 
 #define ASCII_PRINTABLE_MIN (' ')
 #define ASCII_PRINTABLE_MAX ('~')
@@ -37,8 +38,14 @@ extern const int PaletteM2;
 extern const int PaletteC2;
 extern const int PaletteW2;
 
+extern const bool InvertScrollX;
+extern const bool InvertScrollY;
+extern const int ScrollXMultiplier;
+extern const int ScrollYMultiplier;
+
 extern float FontScale;
 extern const float FontScaleMultiplier;
+
 extern const float LineMarginLeft;
 extern const float LineMarginRight;
 
