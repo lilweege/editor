@@ -561,11 +561,11 @@ int main(int argc, char** argv) {
     wai_getExecutablePath(fontPath, pathSz, &dirnameSz);
     strcpy(fontPath+dirnameSz+1, FontFilename);
 
-
     // image -> surface -> texture
     int imgWidth, imgHeight, imgComps;
     unsigned char const* const imgData = STBI_CHECK_PTR(
         stbi_load(fontPath, &imgWidth, &imgHeight, &imgComps, STBI_rgb_alpha));
+    free(fontPath);
     
     int const depth = 32;
     int const pitch = 4 * imgWidth;
