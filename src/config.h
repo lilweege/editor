@@ -41,4 +41,6 @@ extern const float FontScale;
 extern const float LineMarginLeft;
 extern const float LineMarginRight;
 
+extern const unsigned int TargetFPS;
+
 #endif // CONFIG_H_

@@ -30,3 +30,4 @@ const float FontScale = 2.0f;
 const float LineMarginLeft = 0.5f;
 const float LineMarginRight = 1.0f;
 
+const unsigned int TargetFPS = 100;

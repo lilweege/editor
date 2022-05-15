@@ -608,11 +608,16 @@ int main(int argc, char** argv) {
     CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
 
     // main loop
-    // TODO: yield thread, don't pin cpu
+    Uint32 const timestep = 1000 / TargetFPS;
     for (bool quit = false; !quit;) {
+
+        Uint32 startTick = SDL_GetTicks();
+        bool needsRedraw = false;
+
         // handle events
         SDL_Event e;
-        if (SDL_PollEvent(&e)) switch (e.type) {
+        while (SDL_PollEvent(&e)) switch (e.type) {
+
             case SDL_QUIT: {
                 quit = true;
             } break;
@@ -622,10 +627,12 @@ int main(int argc, char** argv) {
                 if (currentMouseCursor != mouseCursorIBeam && (size_t)e.motion.x > leftMarginEnd) {
                     currentMouseCursor = mouseCursorIBeam;
                     SDL_SetCursor(mouseCursorIBeam);
+                    needsRedraw = true;
                 }
                 else if (currentMouseCursor != mouseCursorArrow && (size_t)e.motion.x <= leftMarginEnd) {
                     currentMouseCursor = mouseCursorArrow;
                     SDL_SetCursor(mouseCursorArrow);
+                    needsRedraw = true;
                 }
                 
                 // mouse drag selection
@@ -634,8 +641,8 @@ int main(int argc, char** argv) {
                     size_t mouseY = e.motion.y < 0 ? 0 : e.motion.y;
                     ScreenToCursor(&cursor, mouseX, mouseY, &textBuff, leftMarginEnd, topLine, charWidth, charHeight);
                     UpdateSelection(&cursor);
+                    needsRedraw = true;
                 }
-
             } break;
 
             case SDL_MOUSEBUTTONDOWN: {
@@ -650,12 +657,14 @@ int main(int argc, char** argv) {
                     cursor.curSel.col = cursor.curPos.col;
                     cursor.curSel.ln = cursor.curPos.ln;
                     UpdateSelection(&cursor);
+                    needsRedraw = true;
                 }
             } break;
 
             case SDL_MOUSEBUTTONUP: {
                 if (e.button.button == SDL_BUTTON_LEFT) {
                     cursor.mouseSelecting = false;
+                    needsRedraw = true;
                 }
             } break;
 
@@ -666,18 +675,21 @@ int main(int argc, char** argv) {
                     (dy < 0 && topLine + (-dy) < textBuff.numLines)) // down
                 {
                     topLine -= dy;
+                    needsRedraw = true;
                 }
             } break;
 
             case SDL_WINDOWEVENT: { // https://wiki.libsdl.org/SDL_WindowEvent
                 if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
                     GetScreenSize(window, charWidth, charHeight, &sRows, &sCols);
+                    needsRedraw = true;
                 }
             } break;
 
             case SDL_TEXTINPUT: {
                 HandleTextInput(&textBuff, &cursor, &e.text);
                 CursorAutoscroll(&topLine, cursor.curPos.ln, sRows);
+                needsRedraw = true;
             } break;
 
             case SDL_KEYDOWN: {
@@ -685,83 +697,95 @@ int main(int argc, char** argv) {
                 CursorAutoscroll(&topLine, cursor.curPos.ln, sRows);
                 // on enter or delete, number of lines can change -> recalculate margin
                 CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
+                needsRedraw = true;
             } break;
         }
-
-        // draw bg
-        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteBG), 255));
-        SDL_CHECK_CODE(SDL_RenderClear(renderer));
-
-        // TODO: this loop will change when syntax highlighting is added
-        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteHL), 255)); // selection highlight
-        SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteFG))); // font
         
-        for (size_t y = topLine;
-            y <= topLine+sRows && y < textBuff.numLines;
-            ++y)
-        {
-            int const sy = (int)((y-topLine) * charHeight);
+        if (needsRedraw) {
+            // draw bg
+            SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteBG), 255));
+            SDL_CHECK_CODE(SDL_RenderClear(renderer));
 
-            // draw line number
-            int sx = (int)leftMarginBegin;
-            for (size_t lineNum = y+1; lineNum > 0; lineNum /= 10) {
-                sx -= charWidth;
-                RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, lineNum % 10 + '0', sx, sy, FontScale);
+            // TODO: this loop will change when syntax highlighting is added
+            SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteHL), 255)); // selection highlight
+            SDL_CHECK_CODE(SDL_SetTextureColorMod(fontTexture, COL_RGB(PaletteFG))); // font
+            
+            for (size_t y = topLine;
+                y <= topLine+sRows && y < textBuff.numLines;
+                ++y)
+            {
+                int const sy = (int)((y-topLine) * charHeight);
+
+                // draw line number
+                int sx = (int)leftMarginBegin;
+                for (size_t lineNum = y+1; lineNum > 0; lineNum /= 10) {
+                    sx -= charWidth;
+                    RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, lineNum % 10 + '0', sx, sy, FontScale);
+                }
+
+                // draw line
+                sx = (int)leftMarginEnd;
+                for (size_t x = 0; x < textBuff.lines[y]->numCols; ++x) {
+                    // text select
+                    if ((cursor.selEnd.col != x || cursor.selEnd.ln != y) &&
+                        isBetween(y, x, cursor.selBegin.ln, cursor.selBegin.col, cursor.selEnd.ln, cursor.selEnd.col))
+                    {
+                        SDL_Rect const r = {
+                            .x = sx,
+                            .y = sy,
+                            .w = charWidth,
+                            .h = charHeight,
+                        };
+                        SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &r));
+                    }
+                    
+                    // draw character
+                    char ch = textBuff.lines[y]->buff[x];
+                    if (ASCII_PRINTABLE_MIN <= ch && ch <= ASCII_PRINTABLE_MAX) {
+                        RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, FontScale);
+                    }
+                    else {
+                        // else handle non printable chars
+                        assert(0 && "unrenderable character");
+                    }
+                    sx += charWidth;
+                }
             }
 
-            // draw line
-            sx = (int)leftMarginEnd;
-            for (size_t x = 0; x < textBuff.lines[y]->numCols; ++x) {
-                // text select
-                if ((cursor.selEnd.col != x || cursor.selEnd.ln != y) &&
-                    isBetween(y, x, cursor.selBegin.ln, cursor.selBegin.col, cursor.selEnd.ln, cursor.selEnd.col))
-                {
-                    SDL_Rect const r = {
-                        .x = sx,
-                        .y = sy,
-                        .w = charWidth,
-                        .h = charHeight,
-                    };
-                    SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &r));
-                }
-                
-                // draw character
-                char ch = textBuff.lines[y]->buff[x];
-                if (ASCII_PRINTABLE_MIN <= ch && ch <= ASCII_PRINTABLE_MAX) {
-                    RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, FontScale);
-                }
-                else {
-                    // else handle non printable chars
-                    assert(0 && "unrenderable character");
-                }
-                sx += charWidth;
+            // draw cursor
+            SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteR1), 255)); // cursor
+            if (cursor.curPos.ln >= topLine && cursor.curPos.ln < topLine+sRows) {
+                SDL_Rect const r = {
+                    .x = (int)(cursor.curPos.col * charWidth + leftMarginEnd),
+                    .y = (int)((cursor.curPos.ln-topLine) * charHeight),
+                    .w = 2,
+                    .h = charHeight,
+                };
+                SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
+            }
+
+            // draw selection cursor
+            if (hasSelection(&cursor) && cursor.curSel.ln >= topLine && cursor.curSel.ln < topLine+sRows) {
+                SDL_Rect const r = {
+                    .x = (int)(cursor.curSel.col * charWidth + leftMarginEnd),
+                    .y = (int)((cursor.curSel.ln-topLine) * charHeight),
+                    .w = 2,
+                    .h = charHeight,
+                };
+                SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
+            }
+
+            SDL_RenderPresent(renderer);
+        }
+        else {
+            // sleep if necessary
+            Uint32 endTick = SDL_GetTicks();
+            Uint32 ticksElapsed = endTick - startTick;
+            if (ticksElapsed < timestep) {
+                SDL_Delay(timestep - ticksElapsed);
             }
         }
 
-        // draw cursor
-        SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteR1), 255)); // cursor
-        if (cursor.curPos.ln >= topLine && cursor.curPos.ln < topLine+sRows) {
-            SDL_Rect const r = {
-                .x = (int)(cursor.curPos.col * charWidth + leftMarginEnd),
-                .y = (int)((cursor.curPos.ln-topLine) * charHeight),
-                .w = 2,
-                .h = charHeight,
-            };
-            SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
-        }
-
-        // draw selection cursor
-        if (hasSelection(&cursor) && cursor.curSel.ln >= topLine && cursor.curSel.ln < topLine+sRows) {
-            SDL_Rect const r = {
-                .x = (int)(cursor.curSel.col * charWidth + leftMarginEnd),
-                .y = (int)((cursor.curSel.ln-topLine) * charHeight),
-                .w = 2,
-                .h = charHeight,
-            };
-            SDL_CHECK_CODE(SDL_RenderDrawRect(renderer, &r));
-        }
-
-        SDL_RenderPresent(renderer);
     }
     TextBufferFree(textBuff);
     return 0;
