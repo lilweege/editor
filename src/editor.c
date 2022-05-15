@@ -490,17 +490,16 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
             SDL_free(clip);
         }
     }
+    else if ((code == SDLK_EQUALS || code == SDLK_KP_PLUS) && ctrlPressed) {
+        FontScale *= 1.1f;
+    }
+    else if ((code == SDLK_MINUS || code == SDLK_KP_MINUS) && ctrlPressed) {
+        FontScale /= 1.1f;
+    }
 
     if (isSelecting(cursor)) {
         UpdateSelection(cursor);
     }
-}
-
-static void GetScreenSize(SDL_Window* window, int charWidth, int charHeight, size_t* sRows, size_t* sCols) {
-    int sw, sh;
-    SDL_GetWindowSize(window, &sw, &sh);
-    *sRows = sh / charHeight;
-    *sCols = sw / charWidth;
 }
 
 static void CursorAutoscroll(size_t* topLine, size_t cursorLn, size_t sRows) {
@@ -598,13 +597,16 @@ int main(int argc, char** argv) {
 
     int const fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
     int const fontCharHeight = imgHeight;
-    int const charWidth = (int)(fontCharWidth * FontScale);
-    int const charHeight = (int)(fontCharHeight * FontScale);
+    int charWidth = (int)(fontCharWidth * FontScale);
+    int charHeight = (int)(fontCharHeight * FontScale);
+    int sw, sh;
     TextBuffer textBuff = TextBufferNew(8);
     Cursor cursor = {0};
     size_t topLine = 0, sRows, sCols, leftMarginBegin, leftMarginEnd;
 
-    GetScreenSize(window, charWidth, charHeight, &sRows, &sCols);
+    SDL_GetWindowSize(window, &sw, &sh);
+    sCols = sw / charWidth;
+    sRows = sh / charHeight;
     CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
 
     // main loop
@@ -681,7 +683,7 @@ int main(int argc, char** argv) {
 
             case SDL_WINDOWEVENT: { // https://wiki.libsdl.org/SDL_WindowEvent
                 if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
-                    GetScreenSize(window, charWidth, charHeight, &sRows, &sCols);
+                    SDL_GetWindowSize(window, &sw, &sh);
                     needsRedraw = true;
                 }
             } break;
@@ -700,8 +702,19 @@ int main(int argc, char** argv) {
                 needsRedraw = true;
             } break;
         }
-        
+
         if (needsRedraw) {
+
+            while (fontCharHeight * FontScale > sh)
+                FontScale /= 1.1f;
+            while ((int)(fontCharWidth * FontScale) == 0 || (int)(fontCharHeight * FontScale) == 0)
+                FontScale *= 1.1f;
+            charWidth = (int)(fontCharWidth * FontScale);
+            charHeight = (int)(fontCharHeight * FontScale);
+            sCols = sw / charWidth;
+            sRows = sh / charHeight;
+            CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
+
             // draw bg
             SDL_CHECK_CODE(SDL_SetRenderDrawColor(renderer, COL_RGB(PaletteBG), 255));
             SDL_CHECK_CODE(SDL_RenderClear(renderer));
@@ -746,6 +759,7 @@ int main(int argc, char** argv) {
                     }
                     else {
                         // else handle non printable chars
+                        fprintf(stderr, "Unrenderable character %d at (c=%zu,l=%zu)\n", ch, x, y);
                         assert(0 && "unrenderable character");
                     }
                     sx += charWidth;

@@ -37,7 +37,7 @@ extern const int PaletteM2;
 extern const int PaletteC2;
 extern const int PaletteW2;
 
-extern const float FontScale;
+extern float FontScale;
 extern const float LineMarginLeft;
 extern const float LineMarginRight;
 
