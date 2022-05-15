@@ -1,9 +1,11 @@
 #include "textbuffer.h"
 #include "error.h"
 #include "config.h"
+#include <string.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#include "whereami.h"
 #include <SDL2/SDL.h>
 #include <stdlib.h>
 
@@ -185,7 +187,6 @@ static void HandleTextInput(TextBuffer* tb, Cursor* cursor, SDL_TextInputEvent c
         EraseSelection(tb, cursor);
     }
     const char* s = event->text;
-    printf("TEXT INPUT: %s\n", s);
     size_t n = strlen(s);
     // NOTE: does not handle s with any newline
     LineBufferInsertStr(tb->lines+cursor->curPos.ln, s, n, cursor->curPos.col);
@@ -551,10 +552,20 @@ int main(int argc, char** argv) {
     SDL_Renderer* const renderer = SDL_CHECK_PTR(
         SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED));
 
+
+
+    // absolute path of asset, so fopen can locate the asset no matter the cwd
+    int pathSz = wai_getExecutablePath(NULL, 0, NULL);
+    char* fontPath = (char*)malloc(pathSz + 1 + strlen(FontFilename));
+    int dirnameSz;
+    wai_getExecutablePath(fontPath, pathSz, &dirnameSz);
+    strcpy(fontPath+dirnameSz+1, FontFilename);
+
+
     // image -> surface -> texture
     int imgWidth, imgHeight, imgComps;
     unsigned char const* const imgData = STBI_CHECK_PTR(
-        stbi_load(FontFilename, &imgWidth, &imgHeight, &imgComps, STBI_rgb_alpha));
+        stbi_load(fontPath, &imgWidth, &imgHeight, &imgComps, STBI_rgb_alpha));
     
     int const depth = 32;
     int const pitch = 4 * imgWidth;
