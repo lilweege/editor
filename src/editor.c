@@ -211,7 +211,7 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
     // mods: ctrl, shift, alt
     SDL_Keycode code = event->keysym.sym;
     SDL_Keymod mod = event->keysym.mod;
-    bool ctrlPressed = mod & KMOD_CTRL,
+    bool const ctrlPressed = mod & KMOD_CTRL,
         shiftPressed = mod & KMOD_SHIFT;
     // TODO: slight optimizations, when splitting the current line, choose smaller half to reinsert
     // do this for enter, backspace, delete
@@ -232,8 +232,44 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
         cursor->colMax = cursor->curPos.col;
     }
     else if (code == SDLK_TAB) {
-        // TODO: shift mod -> dedent
-        if (hasSelection(cursor)) {
+        if (shiftPressed && hasSelection(cursor)) {
+            // dedent selection
+            for (size_t line = cursor->selBegin.ln;
+                line <= cursor->selEnd.ln;
+                ++line)
+            {
+                size_t nSpaces = 0;
+                size_t n = tb->lines[line]->numCols;
+                if (n > (size_t)TabSize)
+                    n = (size_t)TabSize;
+                for (; nSpaces < n; ++nSpaces) {
+                    if (tb->lines[line]->buff[nSpaces] != ' ')
+                        break;
+                }
+                LineBufferErase(tb->lines+line, nSpaces, 0);
+                
+                if (line == cursor->curPos.ln)
+                    cursor->curPos.col -= cursor->curPos.col > nSpaces ? nSpaces : cursor->curPos.col;
+                if (line == cursor->curSel.ln)
+                    cursor->curSel.col -= cursor->curSel.col > nSpaces ? nSpaces : cursor->curSel.col;
+            }
+            UpdateSelection(cursor);
+        } else if (shiftPressed) {
+            // dedent line
+            size_t line = cursor->curPos.ln;
+            size_t nSpaces = 0;
+            size_t n = tb->lines[line]->numCols;
+            if (n > (size_t)TabSize)
+                n = (size_t)TabSize;
+            for (; nSpaces < n; ++nSpaces) {
+                if (tb->lines[line]->buff[nSpaces] != ' ')
+                    break;
+            }
+            LineBufferErase(tb->lines+line, nSpaces, 0);
+            cursor->curPos.col -= cursor->curPos.col > nSpaces ? nSpaces : cursor->curPos.col;
+        }
+        else if (hasSelection(cursor)) {
+            // indent selecton
             for (size_t line = cursor->selBegin.ln;
                 line <= cursor->selEnd.ln;
                 ++line)
@@ -245,6 +281,7 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
             UpdateSelection(cursor);
         }
         else {
+            // indent line
             LineBufferInsertChr(tb->lines+cursor->curPos.ln, ' ', TabSize, cursor->curPos.col);
             cursor->curPos.col += TabSize;
             cursor->colMax = cursor->curPos.col;
@@ -619,13 +656,14 @@ int main(int argc, char** argv) {
     int const fontCharHeight = imgHeight;
     int charWidth = (int)(fontCharWidth * FontScale);
     int charHeight = (int)(fontCharHeight * FontScale);
+
     int sw, sh;
+    SDL_GetWindowSize(window, &sw, &sh);
+
     TextBuffer textBuff = TextBufferNew(8);
     Cursor cursor = {0};
     size_t firstLine = 0, firstColumn = 0;
     size_t sRows, sCols, leftMarginBegin, leftMarginEnd;
-
-    SDL_GetWindowSize(window, &sw, &sh);
     CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
 
     // main loop
@@ -769,7 +807,7 @@ int main(int argc, char** argv) {
             sCols = sw / charWidth;
             sRows = sh / charHeight;
             size_t pxDiff = leftMarginEnd / charWidth;
-            size_t const nCols = sCols > pxDiff ? sCols - pxDiff : 0;
+            size_t const nCols = sCols > pxDiff ? sCols - pxDiff : 1;
             size_t const nRows = sRows;
             if (updateScroll) {
                 CursorAutoscroll(&firstLine, &firstColumn, cursor.curPos.ln, cursor.curPos.col, nRows, nCols);
@@ -802,6 +840,8 @@ int main(int argc, char** argv) {
                     x <= firstColumn+nCols && x < textBuff.lines[y]->numCols;
                     ++x)
                 {
+                    char ch = textBuff.lines[y]->buff[x];
+
                     // text select
                     if ((cursor.selEnd.col != x || cursor.selEnd.ln != y) &&
                         isBetween(y, x, cursor.selBegin.ln, cursor.selBegin.col, cursor.selEnd.ln, cursor.selEnd.col))
@@ -813,14 +853,15 @@ int main(int argc, char** argv) {
                             .h = charHeight,
                         };
                         SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &r));
+                        if (ch == ' ')
+                            RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, FontScale);
                     }
                     
                     // draw character
-                    char ch = textBuff.lines[y]->buff[x];
-                    if (ASCII_PRINTABLE_MIN <= ch && ch <= ASCII_PRINTABLE_MAX) {
+                    if (ASCII_PRINTABLE_MIN < ch && ch <= ASCII_PRINTABLE_MAX) {
                         RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, FontScale);
                     }
-                    else {
+                    else if (ch != ' ') {
                         // else handle non printable chars
                         fprintf(stderr, "Unrenderable character %d at (c=%zu,l=%zu)\n", ch, x, y);
                         assert(0 && "unrenderable character");

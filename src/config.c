@@ -28,7 +28,7 @@ const int PaletteW2 = 0xdddddd;
 
 const bool InvertScrollX = false;
 const bool InvertScrollY = false;
-const int ScrollXMultiplier = 4;
+const int ScrollXMultiplier = TabSize;
 const int ScrollYMultiplier = 1;
 
 float FontScale = 2.0f;
