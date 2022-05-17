@@ -3,8 +3,9 @@
 const int InitialWindowWidth = 800;
 const int InitialWindowHeight = 600;
 const char* ProgramTitle = "Editor";
-const char* FontFilename = "res/FSEX300.png";
-const int TabSize = 4;
+const char* FontFilename = "../assets/FSEX300.png";
+const char* VertexShaderFilename = "../shaders/font.vert";
+const char* FragmentShaderFilename = "../shaders/font.frag";
 
 const int PaletteHL = 0x4c566a;
 const int PaletteBG = 0x1d1f21;
@@ -26,6 +27,7 @@ const int PaletteM2 = 0xb59fd6;
 const int PaletteC2 = 0x95e1d2;
 const int PaletteW2 = 0xdddddd;
 
+const int TabSize = 4;
 const bool InvertScrollX = false;
 const bool InvertScrollY = false;
 const int ScrollXMultiplier = TabSize;

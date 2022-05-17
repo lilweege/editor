@@ -8,15 +8,15 @@ OBJS = $(patsubst $(SRC)/%.c,$(OBJ)/%.o,$(SRCS))
 DEPS = $(OBJS:.o=.d)
 
 
-PKGS = sdl2
+PKGS = sdl2 glew
 PKG_FLAGS = $(shell pkg-config --cflags $(PKGS))
 PKG_LIBS = $(shell pkg-config --libs $(PKGS))
 
 CC_COMMON = -std=c11 -march=native -Wall -Wextra -Wpedantic $(PKG_FLAGS)
-CC_DEBUG = -g -fsanitize=undefined,address
+CC_DEBUG = -g
 CC_RELEASE = -DNDEBUG -O3 -Werror
 LD_COMMON = $(PKG_LIBS) -lm
-LD_DEBUG = -fsanitize=undefined,address
+LD_DEBUG =
 LD_RELEASE = 
 
 CFLAGS = $(CC_COMMON) $(CC_DEBUG)

@@ -16,7 +16,8 @@ extern const int InitialWindowWidth;
 extern const int InitialWindowHeight;
 extern const char* ProgramTitle;
 extern const char* FontFilename;
-extern const int TabSize;
+extern const char* VertexShaderFilename;
+extern const char* FragmentShaderFilename;
 
 extern const int PaletteHL;
 extern const int PaletteBG;
@@ -38,6 +39,7 @@ extern const int PaletteM2;
 extern const int PaletteC2;
 extern const int PaletteW2;
 
+extern const int TabSize;
 extern const bool InvertScrollX;
 extern const bool InvertScrollY;
 extern const int ScrollXMultiplier;

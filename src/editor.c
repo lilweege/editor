@@ -1,12 +1,17 @@
 #include "textbuffer.h"
 #include "error.h"
 #include "config.h"
-#include <string.h>
+
+#include "gl.h"
+#include "file.h"
+
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#include "whereami.h"
+#include "stb_image.h" // TODO: don't depend on this
 #include <SDL2/SDL.h>
+
+
+#include <string.h>
 #include <stdlib.h>
 
 
@@ -595,7 +600,94 @@ static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuf
         cursor->curPos.col = maxCols;
 }
 
+#if 1
+int main(int argc, char** argv) {
+    (void) argc; (void) argv;
+    SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
 
+    SDL_Window* const window = SDL_CHECK_PTR(
+        SDL_CreateWindow(ProgramTitle,
+            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+            InitialWindowWidth, InitialWindowHeight,
+            SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL));
+    
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+
+    SDL_CHECK_PTR(SDL_GL_CreateContext(window));
+    
+    if (glewInit() != GLEW_OK)
+        PANIC_HERE("GLEW", "Could not initialize GLEW\n");
+    
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    if (GLEW_ARB_debug_output) {
+        glEnable(GL_DEBUG_OUTPUT);
+        glDebugMessageCallback(GLDebugMessageCallback, NULL);
+    }
+
+    GLuint vertexShader, fragmentShader;
+    if (!CompileShader(VertexShaderFilename, GL_VERTEX_SHADER, &vertexShader))
+        PANIC_HERE("GL", "Could not compile vertex shader.\n");
+    if (!CompileShader(FragmentShaderFilename, GL_FRAGMENT_SHADER, &fragmentShader))
+        PANIC_HERE("GL", "Could not compile fragment shader.\n");
+    
+    GLuint program;
+    if (!LinkProgram(vertexShader, fragmentShader, &program))
+        PANIC_HERE("GL", "Could not link program.\n");
+    glUseProgram(program);
+
+
+
+    char* fontTexturePath = AbsoluteFilePath(FontFilename);
+    int imgWidth, imgHeight, imgComps;
+    unsigned char const* const imgData = STBI_CHECK_PTR(
+        stbi_load(fontTexturePath, &imgWidth, &imgHeight, &imgComps, STBI_rgb_alpha));
+    free(fontTexturePath);
+
+    GLuint fontTexture = 0;
+    glActiveTexture(GL_TEXTURE0);
+    glGenTextures(1, &fontTexture);
+    glBindTexture(GL_TEXTURE_2D, fontTexture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imgWidth, imgHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imgData);
+
+
+
+
+
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    for (bool quit = false; !quit;) {
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) switch (e.type) {
+
+            case SDL_QUIT: {
+                quit = true;
+            } break;
+
+        }
+
+
+        glClearColor(0.0, 0.0, 0.0, 0.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        
+        SDL_GL_SwapWindow(window);
+    }
+}
+
+#else
 int main(int argc, char** argv) {
     (void) argc; (void) argv;
     SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
@@ -609,15 +701,8 @@ int main(int argc, char** argv) {
         SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED));
 
 
-
-    // absolute path of asset, so fopen can locate the asset no matter the cwd
-    int pathSz = wai_getExecutablePath(NULL, 0, NULL);
-    char* fontPath = (char*)malloc(pathSz + 1 + strlen(FontFilename));
-    int dirnameSz;
-    wai_getExecutablePath(fontPath, pathSz, &dirnameSz);
-    strcpy(fontPath+dirnameSz+1, FontFilename);
-
     // image -> surface -> texture
+    char* fontPath = AbsoluteFilePath(FontFilename);
     int imgWidth, imgHeight, imgComps;
     unsigned char const* const imgData = STBI_CHECK_PTR(
         stbi_load(fontPath, &imgWidth, &imgHeight, &imgComps, STBI_rgb_alpha));
@@ -913,3 +998,4 @@ int main(int argc, char** argv) {
     TextBufferFree(textBuff);
     return 0;
 }
+#endif
