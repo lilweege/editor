@@ -600,6 +600,13 @@ static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuf
         cursor->curPos.col = maxCols;
 }
 
+typedef struct {
+    // top and bottom half masks are x and y
+    // terminal should never be wider or taller than 65536 cells
+    uint32_t glyphIdx;
+    uint32_t bgCol, fgCol; // 8bit RGBA
+} TerminalCell;
+
 #if 1
 int main(int argc, char** argv) {
     (void) argc; (void) argv;
@@ -611,8 +618,8 @@ int main(int argc, char** argv) {
             InitialWindowWidth, InitialWindowHeight,
             SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL));
     
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
     SDL_CHECK_PTR(SDL_GL_CreateContext(window));
@@ -660,13 +667,47 @@ int main(int argc, char** argv) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imgWidth, imgHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imgData);
 
 
-
-
-
     GLuint vao;
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
+    glBindFragDataLocation(program, 0, "fragColor");
+
+    int screenWidth = InitialWindowWidth, screenHeight = InitialWindowHeight;
+    int const fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
+    int const fontCharHeight = imgHeight;
+    int charWidth = (int)(fontCharWidth * FontScale);
+    int charHeight = (int)(fontCharHeight * FontScale);
+    size_t sCols = screenWidth / charWidth;
+    size_t sRows = screenHeight / charHeight + 1;
+    int uniformCellSize = glGetUniformLocation(program, "CellSize");
+    int uniformTermSize = glGetUniformLocation(program, "TermSize");
+    int uniformFontScale = glGetUniformLocation(program, "FontScale");
+    glUniform2i(uniformCellSize, fontCharWidth, fontCharHeight);
+    glUniform2i(uniformTermSize, sCols, sRows);
+    glUniform1f(uniformFontScale, FontScale); // TODO: change on zoom
+
+    size_t n = sRows*sCols;
+    size_t b = n*sizeof(TerminalCell);
+    TerminalCell* buff = malloc(b); // TODO: free
+
+    const char* ascii = " !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}";
+    size_t aw = strlen(ascii);
+    for (int i = 0; i < n; ++i) {
+        buff[i].glyphIdx = ascii[i%aw]-ASCII_PRINTABLE_MIN;
+        buff[i].bgCol = rand();// PaletteBG;
+        buff[i].fgCol = rand();// PaletteFG;
+    }
+
+
+    GLuint ssbo;
+    int ssboBinding = 0;
+    glGenBuffers(1, &ssbo);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, b, buff, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ssboBinding, ssbo);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // unbind
+    
     for (bool quit = false; !quit;) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) switch (e.type) {
@@ -675,12 +716,21 @@ int main(int argc, char** argv) {
                 quit = true;
             } break;
 
+            case SDL_WINDOWEVENT: { // https://wiki.libsdl.org/SDL_WindowEvent
+                if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_GetWindowSize(window, &screenWidth, &screenHeight);
+                    glViewport(0, 0, screenWidth, screenHeight);
+                    sCols = screenWidth / charWidth;
+                    sRows = screenHeight / charHeight + 1;
+
+                    glUniform2i(uniformTermSize, sCols, sRows);
+                    // glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, b, buff); //to update partially
+                }
+            } break;
         }
-
-
-        glClearColor(0.0, 0.0, 0.0, 0.0);
+ 
         glClear(GL_COLOR_BUFFER_BIT);
-
+        
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         
         SDL_GL_SwapWindow(window);

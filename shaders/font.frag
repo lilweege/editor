@@ -1,10 +1,40 @@
-#version 330 core
+#version 460 core
 
-uniform sampler2D font;
+struct Glyph {
+    int glyphIdx;
+    int bgCol, fgCol;
+};
 
-in vec2 uv;
+layout(location=0) out vec4 fragColor;
+layout(std430, binding=0) buffer cellBuffer {
+    Glyph glyphs[];
+};
+
+layout(origin_upper_left) in vec4 gl_FragCoord;
+
+// TODO: use ivec probably
+uniform sampler2D Font;
+uniform ivec2 CellSize;
+uniform ivec2 TermSize;
+uniform float FontScale;
+
+vec3 RGB(int col) {
+    return vec3(
+        (col >> 16) & 0xFF,
+        (col >>  8) & 0xFF,
+        (col >>  0) & 0xFF) / 255.0;
+}
 
 void main() {
-    //gl_FragColor = vec4(uv.x, uv.y, 0.0, 1.0);
-    gl_FragColor = texture(font, 1-uv);
+    ivec2 cellIdx = ivec2(gl_FragCoord.xy/FontScale) / CellSize;
+    ivec2 cellPos = ivec2(gl_FragCoord.xy/FontScale) % CellSize;
+    int idx = cellIdx.y * TermSize.x + cellIdx.x;
+    vec4 bgColor = vec4(RGB(glyphs[idx].bgCol), 1);
+    vec4 fgColor = vec4(RGB(glyphs[idx].fgCol), 1);
+
+    int glyphIdx = glyphs[idx].glyphIdx;
+    vec4 texel = texelFetch(Font, ivec2(glyphIdx*CellSize.x, 0) + cellPos, 0);
+
+    // fragColor = vec4(bgColor, 1);
+    fragColor = (1-texel.a)*bgColor + texel*fgColor;
 }
