@@ -708,13 +708,13 @@ int main(int argc, char** argv) {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
     glBufferData(GL_SHADER_STORAGE_BUFFER, b, buff, GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ssboBinding, ssbo);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // unbind
+    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // unbind
     
+    bool needsRedraw = true;
     Uint32 const timestep = 1000 / TargetFPS;
     for (bool quit = false; !quit;) {
 
         Uint32 startTick = SDL_GetTicks();
-        bool needsRedraw = false;
 
         SDL_Event e;
         while (SDL_PollEvent(&e)) switch (e.type) {
@@ -765,7 +765,7 @@ int main(int argc, char** argv) {
  
         assert(n <= maxn);
         if (needsRedraw) {
-
+            needsRedraw = false;
             glClear(GL_COLOR_BUFFER_BIT);
             
             glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
