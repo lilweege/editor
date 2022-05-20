@@ -683,8 +683,8 @@ int main(int argc, char** argv) {
     int uniformCellSize = glGetUniformLocation(program, "CellSize");
     int uniformTermSize = glGetUniformLocation(program, "TermSize");
     int uniformFontScale = glGetUniformLocation(program, "FontScale");
-    glUniform2i(uniformCellSize, fontCharWidth, fontCharHeight);
-    glUniform2i(uniformTermSize, sCols, sRows);
+    glUniform2i(uniformCellSize, (GLint)fontCharWidth, (GLint)fontCharHeight);
+    glUniform2i(uniformTermSize, (GLint)sCols, (GLint)sRows);
     glUniform1f(uniformFontScale, FontScale); // TODO: change on zoom
 
     size_t n = sRows*sCols;
@@ -723,7 +723,7 @@ int main(int argc, char** argv) {
                     sCols = screenWidth / charWidth;
                     sRows = screenHeight / charHeight + 1;
 
-                    glUniform2i(uniformTermSize, sCols, sRows);
+                    glUniform2i(uniformTermSize, (GLint)sCols, (GLint)sRows);
                     // glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, b, buff); //to update partially
                 }
             } break;
@@ -735,6 +735,7 @@ int main(int argc, char** argv) {
         
         SDL_GL_SwapWindow(window);
     }
+    return 0;
 }
 
 #else

@@ -26,7 +26,7 @@ static bool CompileShaderSource(const GLchar *source, GLenum shaderType, GLuint 
     GLint maxSz;
     glGetShaderiv(*shader, GL_INFO_LOG_LENGTH, &maxSz);
     GLsizei infoSz;
-    GLchar info[maxSz];
+    GLchar* info = malloc(maxSz*sizeof(GLchar));
     glGetShaderInfoLog(*shader, maxSz, &infoSz, info);
     if (compiled == GL_FALSE) {
         fprintf(stderr, "GL ERROR: Could not compile shader '%s'\n",
@@ -35,6 +35,7 @@ static bool CompileShaderSource(const GLchar *source, GLenum shaderType, GLuint 
                 "(UNKNOWN SHADER TYPE)");
         fprintf(stderr, "%.*s\n", infoSz, info);
     }
+    free(info);
     return compiled;
 }
 
@@ -58,7 +59,7 @@ bool LinkProgram(GLuint vertShader, GLuint fragShader, GLuint* program) {
     GLint maxSz;
     glGetProgramiv(*program, GL_INFO_LOG_LENGTH, &maxSz);
     GLsizei infoSz;
-    GLchar info[maxSz];
+    GLchar* info = malloc(maxSz*sizeof(GLchar));
     glGetProgramInfoLog(*program, maxSz, &infoSz, info);
     if (infoSz > 0) {
         if (linked == GL_FALSE)
@@ -66,6 +67,7 @@ bool LinkProgram(GLuint vertShader, GLuint fragShader, GLuint* program) {
         fprintf(stderr, "GL INFO: log from program linker\n%.*s\n",
             infoSz, info);
     }
+    free(info);
     glDeleteShader(vertShader);
     glDeleteShader(fragShader);
     return linked;

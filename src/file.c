@@ -21,7 +21,7 @@ char* AbsoluteFilePath(const char* filename) {
 
 char* ReadFileOrCrash(const char* filename, size_t* outSize) {
     char* outBuff;
-    int res = ReadFile(filename, outSize, &outBuff);
+    int res = ReadFileContents(filename, outSize, &outBuff);
     if (res != 0) {
         switch (res) {
             break; case -2: fprintf(stderr, "ERROR: Malloc failed\n");
@@ -42,7 +42,7 @@ char* ReadFileOrCrash(const char* filename, size_t* outSize) {
 // 1 file error (errno)
 // 2 feof
 // 3 ferror
-int ReadFile(const char* filename, size_t* outSize, char** outBuff) {
+int ReadFileContents(const char* filename, size_t* outSize, char** outBuff) {
     assert(outBuff != NULL);
 
     // absolute path (relative to binary)

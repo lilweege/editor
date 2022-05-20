@@ -7,7 +7,7 @@
 
 char* AbsoluteFilePath(const char* filename);
 char* ReadFileOrCrash(const char* filename, size_t* outSize);
-int ReadFile(const char* filename, size_t* outSize, char** outBuff);
+int ReadFileContents(const char* filename, size_t* outSize, char** outBuff);
 
 
 #endif // FILE_H_
