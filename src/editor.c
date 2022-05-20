@@ -679,7 +679,7 @@ int main(int argc, char** argv) {
     int charWidth = (int)(fontCharWidth * FontScale);
     int charHeight = (int)(fontCharHeight * FontScale);
     size_t sCols = screenWidth / charWidth;
-    size_t sRows = screenHeight / charHeight + 1;
+    size_t sRows = screenHeight / charHeight;
     int uniformCellSize = glGetUniformLocation(program, "CellSize");
     int uniformTermSize = glGetUniformLocation(program, "TermSize");
     int uniformFontScale = glGetUniformLocation(program, "FontScale");
@@ -687,16 +687,18 @@ int main(int argc, char** argv) {
     glUniform2i(uniformTermSize, (GLint)sCols, (GLint)sRows);
     glUniform1f(uniformFontScale, FontScale); // TODO: change on zoom
 
-    size_t n = sRows*sCols;
-    size_t b = n*sizeof(TerminalCell);
+    size_t n = (sRows+1)*(sCols+1);
+    size_t maxn = 3440*720; // reasonable maximum
+    size_t b = maxn*sizeof(TerminalCell);
     TerminalCell* buff = malloc(b); // TODO: free
 
     const char* ascii = " !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}";
-    size_t aw = strlen(ascii);
-    for (int i = 0; i < n; ++i) {
+    const size_t aw = strlen(ascii);
+
+    for (size_t i = 0; i < maxn; ++i) {
         buff[i].glyphIdx = ascii[i%aw]-ASCII_PRINTABLE_MIN;
-        buff[i].bgCol = rand();// PaletteBG;
-        buff[i].fgCol = rand();// PaletteFG;
+        buff[i].bgCol = PaletteBG;
+        buff[i].fgCol = PaletteFG;
     }
 
 
@@ -708,7 +710,12 @@ int main(int argc, char** argv) {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ssboBinding, ssbo);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // unbind
     
+    Uint32 const timestep = 1000 / TargetFPS;
     for (bool quit = false; !quit;) {
+
+        Uint32 startTick = SDL_GetTicks();
+        bool needsRedraw = false;
+
         SDL_Event e;
         while (SDL_PollEvent(&e)) switch (e.type) {
 
@@ -721,19 +728,58 @@ int main(int argc, char** argv) {
                     SDL_GetWindowSize(window, &screenWidth, &screenHeight);
                     glViewport(0, 0, screenWidth, screenHeight);
                     sCols = screenWidth / charWidth;
-                    sRows = screenHeight / charHeight + 1;
+                    sRows = screenHeight / charHeight;
+                    glUniform2i(uniformTermSize, sCols, sRows);
+                    size_t nn = (sRows+1)*(sCols+1);
+                    if (n != nn) {
+                        n = nn;
+                        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, b, buff); //to update partially
+                    }
+                    needsRedraw = true;
+                }
+            } break;
 
+            case SDL_KEYDOWN: {
+                SDL_Keycode code = e.key.keysym.sym;
+                SDL_Keymod mod = e.key.keysym.mod;
+                bool ctrlPressed = mod & KMOD_CTRL;
+                if ((code == SDLK_MINUS || code == SDLK_KP_MINUS) && ctrlPressed ||
+                    (code == SDLK_EQUALS || code == SDLK_KP_PLUS) && ctrlPressed)
+                {
+                    if ((code == SDLK_MINUS || code == SDLK_KP_MINUS) && ctrlPressed)
+                        DecreaseFontScale();
+                    else
+                        IncreaseFontScale();
+                    charWidth = (int)(fontCharWidth * FontScale);
+                    charHeight = (int)(fontCharHeight * FontScale);
+                    sCols = screenWidth / charWidth;
+                    sRows = screenHeight / charHeight;
+                    glUniform1f(uniformFontScale, FontScale);
                     glUniform2i(uniformTermSize, (GLint)sCols, (GLint)sRows);
-                    // glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, b, buff); //to update partially
+                    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, b, buff); //to update partially
+                    needsRedraw = true;
+
                 }
             } break;
         }
  
-        glClear(GL_COLOR_BUFFER_BIT);
-        
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-        
-        SDL_GL_SwapWindow(window);
+        assert(n <= maxn);
+        if (needsRedraw) {
+
+            glClear(GL_COLOR_BUFFER_BIT);
+            
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+            
+            SDL_GL_SwapWindow(window);
+        }
+        else {
+            // sleep if necessary
+            Uint32 endTick = SDL_GetTicks();
+            Uint32 ticksElapsed = endTick - startTick;
+            if (ticksElapsed < timestep) {
+                SDL_Delay(timestep - ticksElapsed);
+            }
+        }
     }
     return 0;
 }
