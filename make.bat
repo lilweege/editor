@@ -1,15 +1,12 @@
 @echo off
+setlocal
 
-echo %PATH% | find /c /i "msvc" > nul
-if "%errorlevel%" == "0" goto hasCL
-    echo Script must be run from an msvc-enabled terminal.
-    :: this may require some manual intervension from the user
-    :: either run this script from an msvc-enabled developer console,
-    :: or 'enabling' your terminal by running one of the following commands
-    :: (for some reason microsoft enjoys making things difficult so the exact path depends on the version)
-    :: `call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64`
-    goto :EOF
-:hasCL
+:: either run this script from an msvc-enabled developer console, or find and invoke your vcvars batch script, for instance:
+:: `call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64`
+where /q cl || (
+    echo ERROR: "cl" not found - please run this from the MSVC x64 native tools command prompt.
+    exit /b 1
+)
 
 :: NOTE: don't overwrite %INCLUDE%
 set INCLUDES=/Ilib\SDL2-2.0.22\include /D_REENTRANT /Ilib\glew-2.1.0\include
