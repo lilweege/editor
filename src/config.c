@@ -33,7 +33,7 @@ const bool InvertScrollY = false;
 const int ScrollXMultiplier = 4;
 const int ScrollYMultiplier = 1;
 
-float FontScale = 2.0f;
+const float InitialFontScale = 2.0f;
 const float FontScaleMultiplier = 1.2f;
 
 const float LineMarginLeft = 0.5f;

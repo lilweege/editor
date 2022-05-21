@@ -12,9 +12,9 @@ layout(std430, binding=0) buffer cellBuffer {
 };
 
 uniform sampler2D Font;
-uniform ivec2 CellSize;
-uniform ivec2 TermSize;
 uniform float FontScale;
+uniform ivec2 CellSize;
+uniform ivec2 WindowSize;
 
 vec3 RGB(int col) {
     return vec3(
@@ -26,7 +26,7 @@ vec3 RGB(int col) {
 void main() {
     ivec2 cellIdx = ivec2(gl_FragCoord.xy/FontScale) / CellSize;
     ivec2 cellPos = ivec2(gl_FragCoord.xy/FontScale) % CellSize;
-    int idx = cellIdx.y * (TermSize.x+1) + cellIdx.x;
+    int idx = cellIdx.y * (WindowSize.x+1) + cellIdx.x;
     vec4 bgColor = vec4(RGB(glyphs[idx].bgCol), 1);
     vec4 fgColor = vec4(RGB(glyphs[idx].fgCol), 1);
 

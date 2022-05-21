@@ -45,7 +45,7 @@ extern const bool InvertScrollY;
 extern const int ScrollXMultiplier;
 extern const int ScrollYMultiplier;
 
-extern float FontScale;
+extern const float InitialFontScale;
 extern const float FontScaleMultiplier;
 
 extern const float LineMarginLeft;
