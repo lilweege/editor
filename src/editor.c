@@ -196,7 +196,22 @@ static void Resize() {
     ed.isValid = false;
 }
 
-
+#ifdef _WIN32
+static int EditorResizeEvent(void* data, SDL_Event* event) {
+    if (event->type == SDL_WINDOWEVENT &&
+        (event->window.event == SDL_WINDOWEVENT_RESIZED || event->window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event->window.event == SDL_WINDOWEVENT_EXPOSED))
+    {
+        SDL_Window* window = SDL_GetWindowFromID(event->window.windowID);
+        if (window == (SDL_Window*)data) {
+            Resize();
+            UpdateBuffer();
+            glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, ed.cells.num*sizeof(Cell), ed.cells.buff); //to update partially
+            Redraw();
+        }
+    }
+    return 0;
+}
+#endif
 
 static void InitializeEditor() {
     SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
@@ -291,19 +306,6 @@ static void DestroyEditor() {
     // TODO
 }
 
-#ifdef _WIN32
-static int EditorResizeEvent(void* data, SDL_Event* event) {
-    if (event->type == SDL_WINDOWEVENT &&
-        (event->window.event == SDL_WINDOWEVENT_RESIZED || event->window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event->window.event == SDL_WINDOWEVENT_EXPOSED))
-    {
-        SDL_Window* window = SDL_GetWindowFromID(event->window.windowID);
-        if (window == (SDL_Window*)data) {
-            Resize();
-        }
-    }
-    return 0;
-}
-#endif
 
 
 
@@ -864,7 +866,7 @@ int main(int argc, char** argv) {
     InitializeEditor();
 
     ed.textBuff = TextBufferNew(8);
-    UpdateBuffer();
+    ed.isUpdated = false;
 
     Uint32 const timestep = 1000 / TargetFPS;
     Uint32 lastSecond = 0, frameCount = 0, updateCount = 0;
