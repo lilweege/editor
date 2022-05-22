@@ -15,582 +15,17 @@
 #include <stdlib.h>
 
 
-// typedef struct {
-//     size_t ln, col;
-// } CursorPos;
+typedef struct {
+    size_t ln, col;
+} CursorPos;
 
-// typedef struct {
-//     CursorPos curPos, curSel;
-//     CursorPos selBegin, selEnd;
-//     size_t colMax;
-//     bool shiftSelecting, mouseSelecting;
-// } Cursor;
+typedef struct {
+    CursorPos curPos, curSel;
+    CursorPos selBegin, selEnd;
+    size_t colMax;
+    bool shiftSelecting, mouseSelecting;
+} Cursor;
 
-
-
-// static bool isWhitespace(char c) {
-//     return c <= ' ' || c > '~';
-// }
-
-// static CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur) {
-//     // assumes cur is a valid pos
-//     bool seenDelim = false;
-//     // wrap if at end of line
-//     if (cur.col == tb->lines[cur.ln]->numCols) {
-//         // return if past end of buff
-//         if (cur.ln+1 >= tb->numLines) {
-//             return (CursorPos) { .ln=tb->numLines-1, .col=tb->lines[tb->numLines-1]->numCols };
-//         }
-//         cur.ln += 1;
-//         cur.col = 0;
-//         seenDelim = true;
-//     }
-    
-//     // this block logic is way simpler than others, mostly because handling all that is pain
-    
-//     for (size_t n = tb->lines[cur.ln]->numCols;
-//         cur.col < n;
-//         ++cur.col)
-//     {
-//         char c = tb->lines[cur.ln]->buff[cur.col];
-//         if (isWhitespace(c)) {
-//             seenDelim = true;
-//         }
-//         else if (seenDelim) {
-//             break;
-//         }
-//     }
-    
-//     return cur;
-// }
-
-// static CursorPos TextBuffPrevBlockPos(TextBuffer const* tb, CursorPos cur) {
-//     // assumes cur is a valid pos
-//     // wrap if at end of line
-//     if (cur.col == 0) {
-//         // return if underflow
-//         if (cur.ln == 0) {
-//             return (CursorPos) { .ln=0, .col=0 };
-//         }
-//         cur.ln -= 1;
-//         cur.col = tb->lines[cur.ln]->numCols;
-//     }
-    
-//     bool seenText = false;
-//     --cur.col;
-//     for (size_t n = tb->lines[cur.ln]->numCols;
-//         cur.col < n;
-//         --cur.col)
-//     {
-//         char c = tb->lines[cur.ln]->buff[cur.col];
-//         if (isWhitespace(c)) {
-//             if (seenText)
-//                 break;
-//         }
-//         else {
-//             seenText = true;
-//         }
-//     }
-//     ++cur.col;
-//     return cur;
-// }
-
-// static bool lexLe(size_t y0, size_t x0, size_t y1, size_t x1) {
-//     // (y0,x0) <=_lex (y1,x1)
-//     return (y0 < y1) || (y0 == y1 && x0 <= x1);
-// }
-
-// static bool isBetween(size_t ln, size_t col, size_t y0, size_t x0, size_t y1, size_t x1) {
-//     // (y0,x0) <= (ln,col) <= (y1,x1)
-//     return lexLe(y0, x0, ln, col) && lexLe(ln, col, y1, x1);
-// }
-
-
-// static bool isSelecting(Cursor const* cursor) {
-//     return cursor->mouseSelecting || cursor->shiftSelecting;
-// }
-
-// static bool hasSelection(Cursor const* cursor) {
-//     return cursor->selBegin.col != cursor->selEnd.col ||
-//             cursor->selBegin.ln != cursor->selEnd.ln;
-// }
-
-// static void UpdateSelection(Cursor* cursor) {
-//     // set selBegin and selEnd, determined by curPos and curSel
-//     if (lexLe(cursor->curPos.ln, cursor->curPos.col, cursor->curSel.ln, cursor->curSel.col)) {
-//         cursor->selBegin.col = cursor->curPos.col;
-//         cursor->selBegin.ln = cursor->curPos.ln;
-//         cursor->selEnd.col = cursor->curSel.col;
-//         cursor->selEnd.ln = cursor->curSel.ln;
-//     }
-//     else {
-//         cursor->selBegin.col = cursor->curSel.col;
-//         cursor->selBegin.ln = cursor->curSel.ln;
-//         cursor->selEnd.col = cursor->curPos.col;
-//         cursor->selEnd.ln = cursor->curPos.ln;
-//     }
-// }
-
-// static void StopSelecting(Cursor* cursor) {
-//     cursor->mouseSelecting = false;
-//     cursor->shiftSelecting = false;
-//     cursor->curSel.col = cursor->curPos.col;
-//     cursor->curSel.ln = cursor->curPos.ln;
-//     cursor->selBegin.col = cursor->curPos.col;
-//     cursor->selBegin.ln = cursor->curPos.ln;
-//     cursor->selEnd.col = cursor->curPos.col;
-//     cursor->selEnd.ln = cursor->curPos.ln;
-// }
-
-// static void EraseBetween(TextBuffer* tb, Cursor* cursor, CursorPos begin, CursorPos end) {
-//     if (begin.ln == end.ln) {
-//         LineBufferErase(tb->lines+begin.ln, end.col - begin.col, begin.col);
-//     }
-//     else {
-//         assert(end.ln > begin.ln);
-//         LineBufferErase(tb->lines+begin.ln,
-//             tb->lines[begin.ln]->numCols - begin.col,
-//             begin.col);
-//         LineBufferInsertStr(tb->lines+begin.ln,
-//             tb->lines[end.ln]->buff + end.col,
-//             tb->lines[end.ln]->numCols - end.col,
-//             tb->lines[begin.ln]->numCols);
-//         TextBufferErase(tb, end.ln-begin.ln, begin.ln+1);
-//     }
-
-//     cursor->curPos.ln = begin.ln;
-//     size_t cols = tb->lines[cursor->curPos.ln]->numCols;
-//     cursor->curPos.col = begin.col;
-//     if (cursor->curPos.col > cols)
-//         cursor->curPos.col = cols;
-//     StopSelecting(cursor);
-// }
-
-// static void EraseSelection(TextBuffer* tb, Cursor* cursor) {
-//     EraseBetween(tb, cursor, cursor->selBegin, cursor->selEnd);
-// }
-
-// static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, int fontCharWidth, int fontCharHeight, char ch, int x, int y, float scl) {
-//     size_t idx = ch - ASCII_PRINTABLE_MIN;
-//     SDL_Rect sourceRect = {
-//         .x = (int)(idx * fontCharWidth),
-//         .y = 0,
-//         .w = (int)fontCharWidth,
-//         .h = (int)fontCharHeight,
-//     };
-
-//     SDL_Rect screenRect = {
-//         .x = x,
-//         .y = y,
-//         .w = (int)(fontCharWidth * scl),
-//         .h = (int)(fontCharHeight * scl),
-//     };
-//     // TODO: switch to opengl so this can be batch rendered
-//     SDL_CHECK_CODE(SDL_RenderCopy(renderer, fontTexture, &sourceRect, &screenRect));
-// }
-
-// static void HandleTextInput(TextBuffer* tb, Cursor* cursor, SDL_TextInputEvent const* event) {
-//     if (hasSelection(cursor)) {
-//         EraseSelection(tb, cursor);
-//     }
-//     const char* s = event->text;
-//     size_t n = strlen(s);
-//     // NOTE: does not handle s with any newline
-//     LineBufferInsertStr(tb->lines+cursor->curPos.ln, s, n, cursor->curPos.col);
-//     cursor->curPos.col += n;
-//     cursor->colMax = cursor->curPos.col;
-//     StopSelecting(cursor);
-// }
-
-// static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent const* event) {
-//     // TODO: cursor, text selection, clipboard, zoom, undo/redo, line move, multi-cursor
-//     // keys: backspace, delete, enter, home, end, pgup, pgdown, left/right, up/down, tab
-//     // mods: ctrl, shift, alt
-//     SDL_Keycode code = event->keysym.sym;
-//     SDL_Keymod mod = event->keysym.mod;
-//     bool const ctrlPressed = mod & KMOD_CTRL,
-//         shiftPressed = mod & KMOD_SHIFT;
-//     // TODO: slight optimizations, when splitting the current line, choose smaller half to reinsert
-//     // do this for enter, backspace, delete
-//     if (code == SDLK_RETURN) {
-//         if (hasSelection(cursor)) {
-//             EraseSelection(tb, cursor);
-//         }
-//         TextBufferInsert(tb, 1, cursor->curPos.ln + 1);
-//         LineBufferInsertStr(tb->lines + cursor->curPos.ln + 1,
-//             tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
-//             tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
-//             0);
-//         LineBufferErase(tb->lines + cursor->curPos.ln,
-//             tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
-//             cursor->curPos.col);
-//         cursor->curPos.col = 0;
-//         cursor->curPos.ln += 1;
-//         cursor->colMax = cursor->curPos.col;
-//     }
-//     else if (code == SDLK_TAB) {
-//         if (shiftPressed && hasSelection(cursor)) {
-//             // dedent selection
-//             for (size_t line = cursor->selBegin.ln;
-//                 line <= cursor->selEnd.ln;
-//                 ++line)
-//             {
-//                 size_t nSpaces = 0;
-//                 size_t n = tb->lines[line]->numCols;
-//                 if (n > (size_t)TabSize)
-//                     n = (size_t)TabSize;
-//                 for (; nSpaces < n; ++nSpaces) {
-//                     if (tb->lines[line]->buff[nSpaces] != ' ')
-//                         break;
-//                 }
-//                 LineBufferErase(tb->lines+line, nSpaces, 0);
-                
-//                 if (line == cursor->curPos.ln)
-//                     cursor->curPos.col -= cursor->curPos.col > nSpaces ? nSpaces : cursor->curPos.col;
-//                 if (line == cursor->curSel.ln)
-//                     cursor->curSel.col -= cursor->curSel.col > nSpaces ? nSpaces : cursor->curSel.col;
-//             }
-//             UpdateSelection(cursor);
-//         } else if (shiftPressed) {
-//             // dedent line
-//             size_t line = cursor->curPos.ln;
-//             size_t nSpaces = 0;
-//             size_t n = tb->lines[line]->numCols;
-//             if (n > (size_t)TabSize)
-//                 n = (size_t)TabSize;
-//             for (; nSpaces < n; ++nSpaces) {
-//                 if (tb->lines[line]->buff[nSpaces] != ' ')
-//                     break;
-//             }
-//             LineBufferErase(tb->lines+line, nSpaces, 0);
-//             cursor->curPos.col -= cursor->curPos.col > nSpaces ? nSpaces : cursor->curPos.col;
-//         }
-//         else if (hasSelection(cursor)) {
-//             // indent selecton
-//             for (size_t line = cursor->selBegin.ln;
-//                 line <= cursor->selEnd.ln;
-//                 ++line)
-//             {
-//                 LineBufferInsertChr(tb->lines+line, ' ', TabSize, 0);
-//             }
-//             cursor->curPos.col += TabSize;
-//             cursor->curSel.col += TabSize;
-//             UpdateSelection(cursor);
-//         }
-//         else {
-//             // indent line
-//             LineBufferInsertChr(tb->lines+cursor->curPos.ln, ' ', TabSize, cursor->curPos.col);
-//             cursor->curPos.col += TabSize;
-//             cursor->colMax = cursor->curPos.col;
-//         }
-//     }
-//     else if (code == SDLK_BACKSPACE) {
-//         if (hasSelection(cursor)) {
-//             EraseSelection(tb, cursor);
-//         }
-//         else if (ctrlPressed) {
-//             EraseBetween(tb, cursor,
-//                 TextBuffPrevBlockPos(tb, cursor->curPos),
-//                 cursor->curPos);
-//         }
-//         else {
-//             if (cursor->curPos.col >= 1) {
-//                 cursor->curPos.col -= 1;
-//                 LineBufferErase(tb->lines+cursor->curPos.ln, 1, cursor->curPos.col);
-//             }
-//             else if (cursor->curPos.ln != 0) {
-//                 size_t oldCols = tb->lines[cursor->curPos.ln-1]->numCols;
-//                 LineBufferInsertStr(tb->lines+cursor->curPos.ln-1,
-//                     tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
-//                     tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
-//                     tb->lines[cursor->curPos.ln-1]->numCols);
-//                 cursor->curPos.col = oldCols;
-//                 TextBufferErase(tb, 1, cursor->curPos.ln);
-//                 cursor->curPos.ln -= 1;
-//             }
-//         }
-//         cursor->colMax = cursor->curPos.col;
-//     }
-//     else if (code == SDLK_DELETE) {
-//         if (hasSelection(cursor)) {
-//             EraseSelection(tb, cursor);
-//         }
-//         else if (ctrlPressed) {
-//             EraseBetween(tb, cursor,
-//                 cursor->curPos,
-//                 TextBuffNextBlockPos(tb, cursor->curPos));
-//         }
-//         else {
-//             if (cursor->curPos.col + 1 <= tb->lines[cursor->curPos.ln]->numCols) {
-//                 LineBufferErase(tb->lines+cursor->curPos.ln, 1, cursor->curPos.col);
-//             }
-//             else if (cursor->curPos.ln != tb->numLines-1) {
-//                 LineBufferInsertStr(tb->lines+cursor->curPos.ln,
-//                     tb->lines[cursor->curPos.ln+1]->buff,
-//                     tb->lines[cursor->curPos.ln+1]->numCols,
-//                     tb->lines[cursor->curPos.ln]->numCols);
-//                 TextBufferErase(tb, 1, cursor->curPos.ln+1);
-//             }
-//         }
-//         cursor->colMax = cursor->curPos.col;
-//     }
-//     else if (code == SDLK_LEFT ||
-//             code == SDLK_RIGHT ||
-//             code == SDLK_UP ||
-//             code == SDLK_DOWN ||
-//             code == SDLK_HOME ||
-//             code == SDLK_END)
-//     { // directional keys
-//         if (hasSelection(cursor)) {
-//             cursor->shiftSelecting = true;
-//         }
-//         bool wasSelecting = cursor->shiftSelecting;
-//         if (shiftPressed) {
-//             if (!cursor->shiftSelecting) {
-//                 cursor->curSel.col = cursor->curPos.col;
-//                 cursor->curSel.ln = cursor->curPos.ln;
-//                 UpdateSelection(cursor);
-//                 cursor->shiftSelecting = true;
-//             }
-//         }
-//         else {
-//             StopSelecting(cursor);
-//         }
-//         wasSelecting = wasSelecting && !isSelecting(cursor);
-
-//         switch (code) {
-//             case SDLK_LEFT: {
-//                 if (wasSelecting) {
-//                     cursor->curPos.col = cursor->selBegin.col;
-//                     cursor->curPos.ln = cursor->selBegin.ln;
-//                 }
-//                 else if (ctrlPressed) {
-//                     CursorPos prvPos = TextBuffPrevBlockPos(tb, cursor->curPos);
-//                     cursor->curPos.col = prvPos.col;
-//                     cursor->curPos.ln = prvPos.ln;
-//                 }
-//                 else {
-//                     if (cursor->curPos.col >= 1) {
-//                         cursor->curPos.col -= 1;
-//                     }
-//                     else if (cursor->curPos.ln >= 1) {
-//                         cursor->curPos.ln -= 1;
-//                         cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
-//                     }
-//                 }
-//                 cursor->colMax = cursor->curPos.col;
-//             } break;
-//             case SDLK_RIGHT: {
-//                 if (wasSelecting) {
-//                     cursor->curPos.col = cursor->selEnd.col;
-//                     cursor->curPos.ln = cursor->selEnd.ln;
-//                 }
-//                 else if (ctrlPressed) {
-//                     CursorPos nxtPos = TextBuffNextBlockPos(tb, cursor->curPos);
-//                     cursor->curPos.col = nxtPos.col;
-//                     cursor->curPos.ln = nxtPos.ln;
-//                 }
-//                 else {
-//                     if (cursor->curPos.col + 1 <= tb->lines[cursor->curPos.ln]->numCols) {
-//                         cursor->curPos.col += 1;
-//                     }
-//                     else if (cursor->curPos.ln + 1 < tb->numLines) {
-//                         cursor->curPos.col = 0;
-//                         cursor->curPos.ln += 1;
-//                     }
-//                 }
-//                 cursor->colMax = cursor->curPos.col;
-//             } break;
-//             case SDLK_UP: {
-//                 if (cursor->curPos.ln >= 1) {
-//                     cursor->curPos.ln -= 1;
-//                     if (cursor->curPos.col < cursor->colMax)
-//                         cursor->curPos.col = cursor->colMax;
-//                     size_t cols = tb->lines[cursor->curPos.ln]->numCols;
-//                     if (cursor->curPos.col > cols)
-//                         cursor->curPos.col = cols;
-//                 }
-//                 else {
-//                     cursor->curPos.ln = 0;
-//                     cursor->curPos.col = 0;
-//                     cursor->colMax = cursor->curPos.col;
-//                 }
-//             } break;
-//             case SDLK_DOWN: {
-//                 if (cursor->curPos.ln + 1 < tb->numLines) {
-//                     cursor->curPos.ln += 1;
-//                     if (cursor->curPos.col < cursor->colMax)
-//                         cursor->curPos.col = cursor->colMax;
-//                     size_t cols = tb->lines[cursor->curPos.ln]->numCols;
-//                     if (cursor->curPos.col > cols)
-//                         cursor->curPos.col = cols;
-//                 }
-//                 else {
-//                     cursor->curPos.ln = tb->numLines-1;
-//                     cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
-//                     cursor->colMax = cursor->curPos.col;
-//                 }
-//             } break;
-//             case SDLK_HOME: {
-//                 cursor->curPos.col = 0;
-//                 cursor->colMax = cursor->curPos.col;
-//             } break;
-//             case SDLK_END: {
-//                 cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
-//                 cursor->colMax = cursor->curPos.col;
-//             } break;
-//             default: assert(0 && "Unreachable"); break;
-//         }
-//     }
-//     // TODO: ctrl+o,s,d,f,z,y
-//     else if (code == SDLK_a && ctrlPressed) {
-//         cursor->curSel.col = 0;
-//         cursor->curSel.ln = 0;
-//         cursor->curPos.ln = tb->numLines-1;
-//         cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
-//         UpdateSelection(cursor);
-//     }
-//     else if ((code == SDLK_c || code == SDLK_x) && ctrlPressed) {
-//         // cut/copy
-//         size_t n = cursor->selEnd.col;
-//         for (size_t ln = cursor->selBegin.ln;
-//             ln < cursor->selEnd.ln;
-//             ++ln)
-//         {
-//             n += tb->lines[ln]->numCols+1;
-//         }
-//         n -= cursor->selBegin.col;
-//         char* buff = malloc(n+1);
-//         if (buff == NULL) {
-//             PANIC_HERE("MALLOC", "Could not allocate clipboard buffer");
-//         }
-//         if (cursor->selBegin.ln == cursor->selEnd.ln) {
-//             memcpy(buff,
-//                 tb->lines[cursor->selBegin.ln]->buff + cursor->selBegin.col,
-//                 cursor->selEnd.col - cursor->selBegin.col);
-//         }
-//         else {
-//             size_t i = tb->lines[cursor->selBegin.ln]->numCols - cursor->selBegin.col;
-//             memcpy(buff, tb->lines[cursor->selBegin.ln]->buff + cursor->selBegin.col, i);
-//             buff[i++] = '\n';
-//             for (size_t ln = cursor->selBegin.ln+1;
-//                 ln < cursor->selEnd.ln; ++ln)
-//             {
-//                 size_t sz = tb->lines[ln]->numCols;
-//                 memcpy(buff+i, tb->lines[ln]->buff, sz);
-//                 i += sz;
-//                 buff[i++] = '\n';
-//             }
-//             memcpy(buff+i, tb->lines[cursor->selEnd.ln]->buff, cursor->selEnd.col);
-//         }
-//         buff[n] = 0;
-//         SDL_SetClipboardText(buff);
-//         free(buff);
-//         if (code == SDLK_x) { // cut
-//             EraseSelection(tb, cursor);
-//         }
-//     }
-//     else if (code == SDLK_v && ctrlPressed) {
-//         // paste
-//         if (SDL_HasClipboardText()) {
-//             if (hasSelection(cursor)) {
-//                 EraseSelection(tb, cursor);
-//             }
-//             char* clip = SDL_GetClipboardText();
-//             assert(clip != NULL);
-//             if (clip[0] == '\0') {
-//                 SDL_ERROR_HERE();
-//             }
-//             size_t lineIdx[1024]; // FIXME
-//             size_t nLines = 0;
-//             size_t n = 0;
-//             for (; clip[n] != '\0'; ++n) {
-//                 if (clip[n] == '\n') {
-//                     lineIdx[nLines++] = n;
-//                     assert(nLines < 1024);
-//                 }
-//             }
-//             lineIdx[nLines] = n;
-//             TextBufferInsert(tb, nLines, cursor->curPos.ln+1);
-//             if (nLines > 0) {
-//                 // split line
-//                 LineBufferInsertStr(tb->lines + cursor->curPos.ln + nLines,
-//                     tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
-//                     tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
-//                     0);
-//                 LineBufferErase(tb->lines + cursor->curPos.ln,
-//                     tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
-//                     cursor->curPos.col);
-//             }
-//             LineBufferInsertStr(tb->lines+(cursor->curPos.ln),
-//                 clip, lineIdx[0], cursor->curPos.col);
-//             cursor->curPos.col += lineIdx[0];
-//             for (size_t i = 0; i < nLines; ++i) {
-//                 size_t sz = lineIdx[i+1]-lineIdx[i]-1;
-//                 LineBufferInsertStr(tb->lines+(++cursor->curPos.ln),
-//                     clip+lineIdx[i]+1, sz, 0);
-//                 cursor->curPos.col = sz;
-//             }
-//             SDL_free(clip);
-//         }
-//     }
-//     else if ((code == SDLK_EQUALS || code == SDLK_KP_PLUS) && ctrlPressed) {
-//         IncreaseFontScale();
-//     }
-//     else if ((code == SDLK_MINUS || code == SDLK_KP_MINUS) && ctrlPressed) {
-//         DecreaseFontScale();
-//     }
-
-//     if (isSelecting(cursor)) {
-//         UpdateSelection(cursor);
-//     }
-// }
-
-
-// static void ClampBetween(size_t* x, size_t l, size_t n) {
-//     if (*x > l) {
-//         *x = l;
-//     }
-//     else if (l > *x+n) {
-//         *x = l-n;
-//     }
-// }
-
-// static void CursorAutoscroll(
-//     size_t* firstLine, size_t* firstColumn,
-//     size_t cursorLn, size_t cursorCol,
-//     size_t numRows, size_t numCols)
-// {
-//     ClampBetween(firstLine, cursorLn, numRows-1);
-//     ClampBetween(firstColumn, cursorCol, numCols-1);
-// }
-
-// static void CalculateLeftMargin(size_t* leftMarginBegin, size_t* leftMarginEnd, size_t charWidth, size_t numLines) {
-//     // numLines should never be zero so log is fine
-//     *leftMarginBegin = (size_t)((LineMarginLeft + (int)log10((float)numLines) + 1) * charWidth);
-//     *leftMarginEnd = (size_t)(*leftMarginBegin + LineMarginRight * charWidth);
-// }
-
-// static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuffer const* textBuff, size_t leftMarginEnd, size_t firstColumn, size_t firstLine, int charWidth, int charHeight) {
-//     // offset due to line numbers
-//     if (mouseX < leftMarginEnd) mouseX = 0;
-//     else mouseX -= leftMarginEnd;
-//     // round forward or back to nearest char
-//     mouseX += firstColumn * charWidth + charWidth / 2;
-//     mouseY += firstLine * charHeight;
-
-//     cursor->curPos.col = mouseX / charWidth;
-//     cursor->curPos.ln = mouseY / charHeight;
-
-//     // clamp y
-//     if (cursor->curPos.ln > textBuff->numLines-1)
-//         cursor->curPos.ln = textBuff->numLines-1;
-
-//     // clamp x
-//     size_t maxCols = textBuff->lines[cursor->curPos.ln]->numCols;
-//     if (cursor->curPos.col > maxCols)
-//         cursor->curPos.col = maxCols;
-// }
 
 typedef struct {
     uint32_t glyphIdx; // ascii index
@@ -607,7 +42,6 @@ typedef struct {
     int width, height; // in pixels
     int numRows, numCols; // in cells
     float scale;
-    bool valid;
 } Window;
 
 typedef struct {
@@ -636,11 +70,134 @@ typedef struct {
     Window window;
     GLContext gl;
     CellBuffer cells;
+
+    TextBuffer textBuff;
+    Cursor cursor;
+
+    bool isValid;
+    bool isUpdated;
 } Editor;
 
 static Editor ed;
 
-static int EditorResizeEvent(void* data, SDL_Event* event);
+
+
+static bool lexLe(size_t y0, size_t x0, size_t y1, size_t x1) {
+    // (y0,x0) <=_lex (y1,x1)
+    return (y0 < y1) || (y0 == y1 && x0 <= x1);
+}
+
+static bool isBetween(size_t ln, size_t col, size_t y0, size_t x0, size_t y1, size_t x1) {
+    // (y0,x0) <= (ln,col) <= (y1,x1)
+    return lexLe(y0, x0, ln, col) && lexLe(ln, col, y1, x1);
+}
+
+static bool isSelecting(Cursor const* cursor) {
+    return cursor->mouseSelecting || cursor->shiftSelecting;
+}
+
+static bool hasSelection(Cursor const* cursor) {
+    return cursor->selBegin.col != cursor->selEnd.col ||
+            cursor->selBegin.ln != cursor->selEnd.ln;
+}
+static void UpdateBuffer() {
+    size_t firstRow = 0, firstColumn = 0; // TODO: scrolling
+    size_t idx = 0;
+    size_t y = firstRow;
+    for (; y <= firstRow+ed.window.numRows && y < ed.textBuff.numLines; ++y) {
+        size_t x = firstColumn;
+        for (; x <= firstColumn+ed.window.numCols && x < ed.textBuff.lines[y]->numCols; ++x) {
+            ed.cells.buff[idx].bgCol = PaletteBG;
+            ed.cells.buff[idx].fgCol = PaletteFG;
+            // text select
+            if ((ed.cursor.selEnd.col != x || ed.cursor.selEnd.ln != y) &&
+                isBetween(y, x, ed.cursor.selBegin.ln, ed.cursor.selBegin.col, ed.cursor.selEnd.ln, ed.cursor.selEnd.col))
+            {
+                ed.cells.buff[idx].bgCol = PaletteHL;
+            }
+            ed.cells.buff[idx++].glyphIdx = ed.textBuff.lines[y]->buff[x]-ASCII_PRINTABLE_MIN;
+        }
+        for (; x <= firstColumn+ed.window.numCols; ++x) {
+            ed.cells.buff[idx].bgCol = PaletteBG;
+            ed.cells.buff[idx].fgCol = PaletteBG;
+            ed.cells.buff[idx++].glyphIdx = 0;
+        }
+    }
+    for (; y <= firstRow+ed.window.numRows; ++y) {
+        for (size_t x = 0; x <= firstColumn+ed.window.numCols; ++x) {
+            ed.cells.buff[idx].bgCol = PaletteBG;
+            ed.cells.buff[idx].fgCol = PaletteBG;
+            ed.cells.buff[idx++].glyphIdx = 0;
+        }
+    }
+
+    
+    // cursor
+    idx = ed.cursor.curPos.ln*(ed.window.numCols+1) + ed.cursor.curPos.col;
+    if (isSelecting(&ed.cursor)) {
+        ed.cells.buff[idx].bgCol = PaletteG1;
+        ed.cells.buff[idx].fgCol = PaletteBG;
+        // sel cursor
+        idx = ed.cursor.curSel.ln*(ed.window.numCols+1) + ed.cursor.curSel.col;
+        ed.cells.buff[idx].bgCol = PaletteR1;
+        ed.cells.buff[idx].fgCol = PaletteBG;
+    }
+    else {
+        ed.cells.buff[idx].bgCol = PaletteFG;
+        ed.cells.buff[idx].fgCol = PaletteBG;
+    }
+
+// #ifndef NDEBUG
+//     for (size_t i = ed.cells.num; i < ed.cells.cap; ++i) {
+//         ed.cells.buff[i].glyphIdx = 1;
+//         ed.cells.buff[i].bgCol = 0;
+//         ed.cells.buff[i].fgCol = 0;
+//     }
+// #endif
+    ed.isUpdated = true;
+    ed.isValid = false;
+}
+
+static void Redraw() {
+    glClear(GL_COLOR_BUFFER_BIT);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    SDL_GL_SwapWindow(ed.window.handle);
+    ed.isValid = true;
+}
+
+static void UpdateDimensions() {
+    GLint const fontCharWidth = ed.fontSrc.width / ASCII_PRINTABLE_CNT;
+    GLint const fontCharHeight = ed.fontSrc.height;
+    ed.window.numCols = ed.window.width / (int)(fontCharWidth * ed.window.scale);
+    ed.window.numRows = ed.window.height / (int)(fontCharHeight * ed.window.scale);
+    size_t n = (ed.window.numRows+1)*(ed.window.numCols+1);
+    if (ed.cells.num != n) {
+        ed.cells.num = n;
+        ed.isUpdated = false;
+    }
+}
+static void IncreaseFontScale() {
+    ed.window.scale *= FontScaleMultiplier;
+    UpdateDimensions();
+    glUniform2i(ed.gl.uWindowSize, ed.window.numCols, ed.window.numRows);
+    glUniform1f(ed.gl.uFontScale, ed.window.scale);
+}
+static void DecreaseFontScale() {
+    ed.window.scale /= FontScaleMultiplier;
+    UpdateDimensions();
+    glUniform2i(ed.gl.uWindowSize, ed.window.numCols, ed.window.numRows);
+    glUniform1f(ed.gl.uFontScale, ed.window.scale);
+}
+static void Resize() {
+    SDL_GetWindowSize(ed.window.handle, &ed.window.width, &ed.window.height);
+    glViewport(0, 0, ed.window.width, ed.window.height);
+    UpdateDimensions();
+    glUniform2i(ed.gl.uWindowSize, ed.window.numCols, ed.window.numRows);
+    ed.isValid = false;
+}
+
+
+
 static void InitializeEditor() {
     SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
 
@@ -655,7 +212,9 @@ static void InitializeEditor() {
             ed.window.width, ed.window.height,
             SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL));
 
+#ifdef _WIN32
     SDL_AddEventWatch(EditorResizeEvent, ed.window.handle);
+#endif
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
@@ -709,12 +268,11 @@ static void InitializeEditor() {
     ed.gl.uFontScale  = glGetUniformLocation(ed.gl.program, "FontScale");
     ed.gl.uCellSize   = glGetUniformLocation(ed.gl.program, "CellSize");
     ed.gl.uWindowSize = glGetUniformLocation(ed.gl.program, "WindowSize");
-    glUniform1f(ed.gl.uFontScale, ed.window.scale);
     GLint const fontCharWidth = ed.fontSrc.width / ASCII_PRINTABLE_CNT;
     GLint const fontCharHeight = ed.fontSrc.height;
     glUniform2i(ed.gl.uCellSize, fontCharWidth, fontCharHeight);
-    ed.window.numCols = ed.window.width / (int)(fontCharWidth * ed.window.scale);
-    ed.window.numRows = ed.window.height / (int)(fontCharHeight * ed.window.scale);
+    UpdateDimensions();
+    glUniform1f(ed.gl.uFontScale, ed.window.scale);
     glUniform2i(ed.gl.uWindowSize, ed.window.numCols, ed.window.numRows);
 
     ed.cells.cap = 3440*720; // reasonable maximum
@@ -733,56 +291,7 @@ static void DestroyEditor() {
     // TODO
 }
 
-static void UpdateBuffer() {
-    const char* ascii = " !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}";
-    const size_t aw = strlen(ascii);
-    for (size_t i = 0; i < ed.cells.num; ++i) {
-        ed.cells.buff[i].glyphIdx = ascii[i%aw]-ASCII_PRINTABLE_MIN;
-        ed.cells.buff[i].bgCol = (rand()&0xFF)|((rand()&0xFF)<<8)|((rand()&0xFF)<<16);//PaletteBG;
-        ed.cells.buff[i].fgCol = (rand()&0xFF)|((rand()&0xFF)<<8)|((rand()&0xFF)<<16);//PaletteFG;
-        // ed.cells.buff[i].bgCol = PaletteBG;
-        // ed.cells.buff[i].fgCol = PaletteFG;
-    }
-    for (size_t i = ed.cells.num; i < ed.cells.cap; ++i) {
-        ed.cells.buff[i].bgCol = 0;
-        ed.cells.buff[i].fgCol = 0;
-    }
-}
-
-static void Repaint() {
-    glClear(GL_COLOR_BUFFER_BIT);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    SDL_GL_SwapWindow(ed.window.handle);
-    ed.window.valid = true;
-}
-
-static void ChangeZoom() {
-    GLint const fontCharWidth = ed.fontSrc.width / ASCII_PRINTABLE_CNT;
-    GLint const fontCharHeight = ed.fontSrc.height;
-    ed.window.numCols = ed.window.width / (int)(fontCharWidth * ed.window.scale);
-    ed.window.numRows = ed.window.height / (int)(fontCharHeight * ed.window.scale);
-    glUniform2i(ed.gl.uWindowSize, ed.window.numCols, ed.window.numRows);
-    glUniform1f(ed.gl.uFontScale, ed.window.scale);
-    ed.window.valid = false;
-}
-static void IncreaseFontScale() { ed.window.scale *= FontScaleMultiplier; ChangeZoom(); }
-static void DecreaseFontScale() { ed.window.scale /= FontScaleMultiplier; ChangeZoom(); }
-
-static void Resize() {
-    SDL_GetWindowSize(ed.window.handle, &ed.window.width, &ed.window.height);
-    glViewport(0, 0, ed.window.width, ed.window.height);
-    GLint const fontCharWidth = ed.fontSrc.width / ASCII_PRINTABLE_CNT;
-    GLint const fontCharHeight = ed.fontSrc.height;
-    ed.window.numCols = ed.window.width / (int)(fontCharWidth * ed.window.scale);
-    ed.window.numRows = ed.window.height / (int)(fontCharHeight * ed.window.scale);
-    glUniform2i(ed.gl.uWindowSize, ed.window.numCols, ed.window.numRows);
-    size_t n = (ed.window.numRows+1)*(ed.window.numCols+1);
-    if (ed.cells.num != n) {
-        ed.cells.num = n;
-        ed.window.valid = false;
-    }
-}
-
+#ifdef _WIN32
 static int EditorResizeEvent(void* data, SDL_Event* event) {
     if (event->type == SDL_WINDOWEVENT &&
         (event->window.event == SDL_WINDOWEVENT_RESIZED || event->window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event->window.event == SDL_WINDOWEVENT_EXPOSED))
@@ -790,33 +299,588 @@ static int EditorResizeEvent(void* data, SDL_Event* event) {
         SDL_Window* window = SDL_GetWindowFromID(event->window.windowID);
         if (window == (SDL_Window*)data) {
             Resize();
-            Repaint();
         }
     }
     return 0;
 }
+#endif
+
+
+
+
+static bool isWhitespace(char c) {
+    return c <= ' ' || c > '~';
+}
+
+static CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur) {
+    // assumes cur is a valid pos
+    bool seenDelim = false;
+    // wrap if at end of line
+    if (cur.col == tb->lines[cur.ln]->numCols) {
+        // return if past end of buff
+        if (cur.ln+1 >= tb->numLines) {
+            return (CursorPos) { .ln=tb->numLines-1, .col=tb->lines[tb->numLines-1]->numCols };
+        }
+        cur.ln += 1;
+        cur.col = 0;
+        seenDelim = true;
+    }
+    
+    // this block logic is way simpler than others, mostly because handling all that is pain
+    
+    for (size_t n = tb->lines[cur.ln]->numCols;
+        cur.col < n;
+        ++cur.col)
+    {
+        char c = tb->lines[cur.ln]->buff[cur.col];
+        if (isWhitespace(c)) {
+            seenDelim = true;
+        }
+        else if (seenDelim) {
+            break;
+        }
+    }
+    
+    return cur;
+}
+
+static CursorPos TextBuffPrevBlockPos(TextBuffer const* tb, CursorPos cur) {
+    // assumes cur is a valid pos
+    // wrap if at end of line
+    if (cur.col == 0) {
+        // return if underflow
+        if (cur.ln == 0) {
+            return (CursorPos) { .ln=0, .col=0 };
+        }
+        cur.ln -= 1;
+        cur.col = tb->lines[cur.ln]->numCols;
+    }
+    
+    bool seenText = false;
+    --cur.col;
+    for (size_t n = tb->lines[cur.ln]->numCols;
+        cur.col < n;
+        --cur.col)
+    {
+        char c = tb->lines[cur.ln]->buff[cur.col];
+        if (isWhitespace(c)) {
+            if (seenText)
+                break;
+        }
+        else {
+            seenText = true;
+        }
+    }
+    ++cur.col;
+    return cur;
+}
+
+
+
+static void UpdateSelection(Cursor* cursor) {
+    // set selBegin and selEnd, determined by curPos and curSel
+    if (lexLe(cursor->curPos.ln, cursor->curPos.col, cursor->curSel.ln, cursor->curSel.col)) {
+        cursor->selBegin.col = cursor->curPos.col;
+        cursor->selBegin.ln = cursor->curPos.ln;
+        cursor->selEnd.col = cursor->curSel.col;
+        cursor->selEnd.ln = cursor->curSel.ln;
+    }
+    else {
+        cursor->selBegin.col = cursor->curSel.col;
+        cursor->selBegin.ln = cursor->curSel.ln;
+        cursor->selEnd.col = cursor->curPos.col;
+        cursor->selEnd.ln = cursor->curPos.ln;
+    }
+}
+
+static void StopSelecting(Cursor* cursor) {
+    cursor->mouseSelecting = false;
+    cursor->shiftSelecting = false;
+    cursor->curSel.col = cursor->curPos.col;
+    cursor->curSel.ln = cursor->curPos.ln;
+    cursor->selBegin.col = cursor->curPos.col;
+    cursor->selBegin.ln = cursor->curPos.ln;
+    cursor->selEnd.col = cursor->curPos.col;
+    cursor->selEnd.ln = cursor->curPos.ln;
+}
+
+static void EraseBetween(TextBuffer* tb, Cursor* cursor, CursorPos begin, CursorPos end) {
+    if (begin.ln == end.ln) {
+        LineBufferErase(tb->lines+begin.ln, end.col - begin.col, begin.col);
+    }
+    else {
+        assert(end.ln > begin.ln);
+        LineBufferErase(tb->lines+begin.ln,
+            tb->lines[begin.ln]->numCols - begin.col,
+            begin.col);
+        LineBufferInsertStr(tb->lines+begin.ln,
+            tb->lines[end.ln]->buff + end.col,
+            tb->lines[end.ln]->numCols - end.col,
+            tb->lines[begin.ln]->numCols);
+        TextBufferErase(tb, end.ln-begin.ln, begin.ln+1);
+    }
+
+    cursor->curPos.ln = begin.ln;
+    size_t cols = tb->lines[cursor->curPos.ln]->numCols;
+    cursor->curPos.col = begin.col;
+    if (cursor->curPos.col > cols)
+        cursor->curPos.col = cols;
+    StopSelecting(cursor);
+}
+
+static void EraseSelection(TextBuffer* tb, Cursor* cursor) {
+    EraseBetween(tb, cursor, cursor->selBegin, cursor->selEnd);
+}
+
+// static void RenderCharacter(SDL_Renderer* renderer, SDL_Texture* fontTexture, int fontCharWidth, int fontCharHeight, char ch, int x, int y, float scl) {
+//     size_t idx = ch - ASCII_PRINTABLE_MIN;
+//     SDL_Rect sourceRect = {
+//         .x = (int)(idx * fontCharWidth),
+//         .y = 0,
+//         .w = (int)fontCharWidth,
+//         .h = (int)fontCharHeight,
+//     };
+
+//     SDL_Rect screenRect = {
+//         .x = x,
+//         .y = y,
+//         .w = (int)(fontCharWidth * scl),
+//         .h = (int)(fontCharHeight * scl),
+//     };
+//     // TODO: switch to opengl so this can be batch rendered
+//     SDL_CHECK_CODE(SDL_RenderCopy(renderer, fontTexture, &sourceRect, &screenRect));
+// }
+
+static void HandleTextInput(TextBuffer* tb, Cursor* cursor, SDL_TextInputEvent const* event) {
+    if (hasSelection(cursor)) {
+        EraseSelection(tb, cursor);
+    }
+    const char* s = event->text;
+    size_t n = strlen(s);
+    // printf("TEXT INPUT: %s\n", s);
+    // NOTE: does not handle s with any newline
+    LineBufferInsertStr(tb->lines+cursor->curPos.ln, s, n, cursor->curPos.col);
+    cursor->curPos.col += n;
+    cursor->colMax = cursor->curPos.col;
+    // StopSelecting(cursor);
+}
+
+static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent const* event) {
+    // TODO: cursor, text selection, clipboard, zoom, undo/redo, line move, multi-cursor
+    // keys: backspace, delete, enter, home, end, pgup, pgdown, left/right, up/down, tab
+    // mods: ctrl, shift, alt
+    SDL_Keycode code = event->keysym.sym;
+    SDL_Keymod mod = event->keysym.mod;
+    bool const ctrlPressed = mod & KMOD_CTRL,
+        shiftPressed = mod & KMOD_SHIFT;
+    // TODO: slight optimizations, when splitting the current line, choose smaller half to reinsert
+    // do this for enter, backspace, delete
+    if (code == SDLK_RETURN) {
+        if (hasSelection(cursor)) {
+            EraseSelection(tb, cursor);
+        }
+        TextBufferInsert(tb, 1, cursor->curPos.ln + 1);
+        LineBufferInsertStr(tb->lines + cursor->curPos.ln + 1,
+            tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
+            tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
+            0);
+        LineBufferErase(tb->lines + cursor->curPos.ln,
+            tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
+            cursor->curPos.col);
+        cursor->curPos.col = 0;
+        cursor->curPos.ln += 1;
+        cursor->colMax = cursor->curPos.col;
+    }
+    else if (code == SDLK_TAB) {
+        if (shiftPressed && hasSelection(cursor)) {
+            // dedent selection
+            for (size_t line = cursor->selBegin.ln;
+                line <= cursor->selEnd.ln;
+                ++line)
+            {
+                size_t nSpaces = 0;
+                size_t n = tb->lines[line]->numCols;
+                if (n > (size_t)TabSize)
+                    n = (size_t)TabSize;
+                for (; nSpaces < n; ++nSpaces) {
+                    if (tb->lines[line]->buff[nSpaces] != ' ')
+                        break;
+                }
+                LineBufferErase(tb->lines+line, nSpaces, 0);
+                
+                if (line == cursor->curPos.ln)
+                    cursor->curPos.col -= cursor->curPos.col > nSpaces ? nSpaces : cursor->curPos.col;
+                if (line == cursor->curSel.ln)
+                    cursor->curSel.col -= cursor->curSel.col > nSpaces ? nSpaces : cursor->curSel.col;
+            }
+            UpdateSelection(cursor);
+        } else if (shiftPressed) {
+            // dedent line
+            size_t line = cursor->curPos.ln;
+            size_t nSpaces = 0;
+            size_t n = tb->lines[line]->numCols;
+            if (n > (size_t)TabSize)
+                n = (size_t)TabSize;
+            for (; nSpaces < n; ++nSpaces) {
+                if (tb->lines[line]->buff[nSpaces] != ' ')
+                    break;
+            }
+            LineBufferErase(tb->lines+line, nSpaces, 0);
+            cursor->curPos.col -= cursor->curPos.col > nSpaces ? nSpaces : cursor->curPos.col;
+        }
+        else if (hasSelection(cursor)) {
+            // indent selecton
+            for (size_t line = cursor->selBegin.ln;
+                line <= cursor->selEnd.ln;
+                ++line)
+            {
+                LineBufferInsertChr(tb->lines+line, ' ', TabSize, 0);
+            }
+            cursor->curPos.col += TabSize;
+            cursor->curSel.col += TabSize;
+            UpdateSelection(cursor);
+        }
+        else {
+            // indent line
+            LineBufferInsertChr(tb->lines+cursor->curPos.ln, ' ', TabSize, cursor->curPos.col);
+            cursor->curPos.col += TabSize;
+            cursor->colMax = cursor->curPos.col;
+        }
+    }
+    else if (code == SDLK_BACKSPACE) {
+        if (hasSelection(cursor)) {
+            EraseSelection(tb, cursor);
+        }
+        else if (ctrlPressed) {
+            EraseBetween(tb, cursor,
+                TextBuffPrevBlockPos(tb, cursor->curPos),
+                cursor->curPos);
+        }
+        else {
+            if (cursor->curPos.col >= 1) {
+                cursor->curPos.col -= 1;
+                LineBufferErase(tb->lines+cursor->curPos.ln, 1, cursor->curPos.col);
+            }
+            else if (cursor->curPos.ln != 0) {
+                size_t oldCols = tb->lines[cursor->curPos.ln-1]->numCols;
+                LineBufferInsertStr(tb->lines+cursor->curPos.ln-1,
+                    tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
+                    tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
+                    tb->lines[cursor->curPos.ln-1]->numCols);
+                cursor->curPos.col = oldCols;
+                TextBufferErase(tb, 1, cursor->curPos.ln);
+                cursor->curPos.ln -= 1;
+            }
+        }
+        cursor->colMax = cursor->curPos.col;
+    }
+    else if (code == SDLK_DELETE) {
+        if (hasSelection(cursor)) {
+            EraseSelection(tb, cursor);
+        }
+        else if (ctrlPressed) {
+            EraseBetween(tb, cursor,
+                cursor->curPos,
+                TextBuffNextBlockPos(tb, cursor->curPos));
+        }
+        else {
+            if (cursor->curPos.col + 1 <= tb->lines[cursor->curPos.ln]->numCols) {
+                LineBufferErase(tb->lines+cursor->curPos.ln, 1, cursor->curPos.col);
+            }
+            else if (cursor->curPos.ln != tb->numLines-1) {
+                LineBufferInsertStr(tb->lines+cursor->curPos.ln,
+                    tb->lines[cursor->curPos.ln+1]->buff,
+                    tb->lines[cursor->curPos.ln+1]->numCols,
+                    tb->lines[cursor->curPos.ln]->numCols);
+                TextBufferErase(tb, 1, cursor->curPos.ln+1);
+            }
+        }
+        cursor->colMax = cursor->curPos.col;
+    }
+    else if (code == SDLK_LEFT ||
+            code == SDLK_RIGHT ||
+            code == SDLK_UP ||
+            code == SDLK_DOWN ||
+            code == SDLK_HOME ||
+            code == SDLK_END)
+    { // directional keys
+        if (hasSelection(cursor)) {
+            cursor->shiftSelecting = true;
+        }
+        bool wasSelecting = cursor->shiftSelecting;
+        if (shiftPressed) {
+            if (!cursor->shiftSelecting) {
+                cursor->curSel.col = cursor->curPos.col;
+                cursor->curSel.ln = cursor->curPos.ln;
+                UpdateSelection(cursor);
+                cursor->shiftSelecting = true;
+            }
+        }
+        else {
+            StopSelecting(cursor);
+        }
+        wasSelecting = wasSelecting && !isSelecting(cursor);
+
+        switch (code) {
+            case SDLK_LEFT: {
+                if (wasSelecting) {
+                    cursor->curPos.col = cursor->selBegin.col;
+                    cursor->curPos.ln = cursor->selBegin.ln;
+                }
+                else if (ctrlPressed) {
+                    CursorPos prvPos = TextBuffPrevBlockPos(tb, cursor->curPos);
+                    cursor->curPos.col = prvPos.col;
+                    cursor->curPos.ln = prvPos.ln;
+                }
+                else {
+                    if (cursor->curPos.col >= 1) {
+                        cursor->curPos.col -= 1;
+                    }
+                    else if (cursor->curPos.ln >= 1) {
+                        cursor->curPos.ln -= 1;
+                        cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
+                    }
+                }
+                cursor->colMax = cursor->curPos.col;
+            } break;
+            case SDLK_RIGHT: {
+                if (wasSelecting) {
+                    cursor->curPos.col = cursor->selEnd.col;
+                    cursor->curPos.ln = cursor->selEnd.ln;
+                }
+                else if (ctrlPressed) {
+                    CursorPos nxtPos = TextBuffNextBlockPos(tb, cursor->curPos);
+                    cursor->curPos.col = nxtPos.col;
+                    cursor->curPos.ln = nxtPos.ln;
+                }
+                else {
+                    if (cursor->curPos.col + 1 <= tb->lines[cursor->curPos.ln]->numCols) {
+                        cursor->curPos.col += 1;
+                    }
+                    else if (cursor->curPos.ln + 1 < tb->numLines) {
+                        cursor->curPos.col = 0;
+                        cursor->curPos.ln += 1;
+                    }
+                }
+                cursor->colMax = cursor->curPos.col;
+            } break;
+            case SDLK_UP: {
+                if (cursor->curPos.ln >= 1) {
+                    cursor->curPos.ln -= 1;
+                    if (cursor->curPos.col < cursor->colMax)
+                        cursor->curPos.col = cursor->colMax;
+                    size_t cols = tb->lines[cursor->curPos.ln]->numCols;
+                    if (cursor->curPos.col > cols)
+                        cursor->curPos.col = cols;
+                }
+                else {
+                    cursor->curPos.ln = 0;
+                    cursor->curPos.col = 0;
+                    cursor->colMax = cursor->curPos.col;
+                }
+            } break;
+            case SDLK_DOWN: {
+                if (cursor->curPos.ln + 1 < tb->numLines) {
+                    cursor->curPos.ln += 1;
+                    if (cursor->curPos.col < cursor->colMax)
+                        cursor->curPos.col = cursor->colMax;
+                    size_t cols = tb->lines[cursor->curPos.ln]->numCols;
+                    if (cursor->curPos.col > cols)
+                        cursor->curPos.col = cols;
+                }
+                else {
+                    cursor->curPos.ln = tb->numLines-1;
+                    cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
+                    cursor->colMax = cursor->curPos.col;
+                }
+            } break;
+            case SDLK_HOME: {
+                cursor->curPos.col = 0;
+                cursor->colMax = cursor->curPos.col;
+            } break;
+            case SDLK_END: {
+                cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
+                cursor->colMax = cursor->curPos.col;
+            } break;
+            default: assert(0 && "Unreachable"); break;
+        }
+    }
+    // TODO: ctrl+o,s,d,f,z,y
+    else if (code == SDLK_a && ctrlPressed) {
+        cursor->curSel.col = 0;
+        cursor->curSel.ln = 0;
+        cursor->curPos.ln = tb->numLines-1;
+        cursor->curPos.col = tb->lines[cursor->curPos.ln]->numCols;
+        UpdateSelection(cursor);
+    }
+    else if ((code == SDLK_c || code == SDLK_x) && ctrlPressed) {
+        // cut/copy
+        size_t n = cursor->selEnd.col;
+        for (size_t ln = cursor->selBegin.ln;
+            ln < cursor->selEnd.ln;
+            ++ln)
+        {
+            n += tb->lines[ln]->numCols+1;
+        }
+        n -= cursor->selBegin.col;
+        char* buff = malloc(n+1);
+        if (buff == NULL) {
+            PANIC_HERE("MALLOC", "Could not allocate clipboard buffer");
+        }
+        if (cursor->selBegin.ln == cursor->selEnd.ln) {
+            memcpy(buff,
+                tb->lines[cursor->selBegin.ln]->buff + cursor->selBegin.col,
+                cursor->selEnd.col - cursor->selBegin.col);
+        }
+        else {
+            size_t i = tb->lines[cursor->selBegin.ln]->numCols - cursor->selBegin.col;
+            memcpy(buff, tb->lines[cursor->selBegin.ln]->buff + cursor->selBegin.col, i);
+            buff[i++] = '\n';
+            for (size_t ln = cursor->selBegin.ln+1;
+                ln < cursor->selEnd.ln; ++ln)
+            {
+                size_t sz = tb->lines[ln]->numCols;
+                memcpy(buff+i, tb->lines[ln]->buff, sz);
+                i += sz;
+                buff[i++] = '\n';
+            }
+            memcpy(buff+i, tb->lines[cursor->selEnd.ln]->buff, cursor->selEnd.col);
+        }
+        buff[n] = 0;
+        SDL_SetClipboardText(buff);
+        free(buff);
+        if (code == SDLK_x) { // cut
+            EraseSelection(tb, cursor);
+        }
+    }
+    else if (code == SDLK_v && ctrlPressed) {
+        // paste
+        if (SDL_HasClipboardText()) {
+            if (hasSelection(cursor)) {
+                EraseSelection(tb, cursor);
+            }
+            char* clip = SDL_GetClipboardText();
+            assert(clip != NULL);
+            if (clip[0] == '\0') {
+                SDL_ERROR_HERE();
+            }
+            size_t lineIdx[1024]; // FIXME
+            size_t nLines = 0;
+            size_t n = 0;
+            for (; clip[n] != '\0'; ++n) {
+                if (clip[n] == '\n') {
+                    lineIdx[nLines++] = n;
+                    assert(nLines < 1024);
+                }
+            }
+            lineIdx[nLines] = n;
+            TextBufferInsert(tb, nLines, cursor->curPos.ln+1);
+            if (nLines > 0) {
+                // split line
+                LineBufferInsertStr(tb->lines + cursor->curPos.ln + nLines,
+                    tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
+                    tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
+                    0);
+                LineBufferErase(tb->lines + cursor->curPos.ln,
+                    tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
+                    cursor->curPos.col);
+            }
+            LineBufferInsertStr(tb->lines+(cursor->curPos.ln),
+                clip, lineIdx[0], cursor->curPos.col);
+            cursor->curPos.col += lineIdx[0];
+            for (size_t i = 0; i < nLines; ++i) {
+                size_t sz = lineIdx[i+1]-lineIdx[i]-1;
+                LineBufferInsertStr(tb->lines+(++cursor->curPos.ln),
+                    clip+lineIdx[i]+1, sz, 0);
+                cursor->curPos.col = sz;
+            }
+            SDL_free(clip);
+        }
+    }
+    else if ((code == SDLK_EQUALS || code == SDLK_KP_PLUS) && ctrlPressed) {
+        IncreaseFontScale();
+    }
+    else if ((code == SDLK_MINUS || code == SDLK_KP_MINUS) && ctrlPressed) {
+        DecreaseFontScale();
+    }
+
+    if (isSelecting(cursor)) {
+        UpdateSelection(cursor);
+    }
+    if (!hasSelection(cursor)) {
+        cursor->shiftSelecting = false;
+    }
+}
+
+
+// static void ClampBetween(size_t* x, size_t l, size_t n) {
+//     if (*x > l) {
+//         *x = l;
+//     }
+//     else if (l > *x+n) {
+//         *x = l-n;
+//     }
+// }
+
+// static void CursorAutoscroll(
+//     size_t* firstLine, size_t* firstColumn,
+//     size_t cursorLn, size_t cursorCol,
+//     size_t numRows, size_t numCols)
+// {
+//     ClampBetween(firstLine, cursorLn, numRows-1);
+//     ClampBetween(firstColumn, cursorCol, numCols-1);
+// }
+
+// static void CalculateLeftMargin(size_t* leftMarginBegin, size_t* leftMarginEnd, size_t charWidth, size_t numLines) {
+//     // numLines should never be zero so log is fine
+//     *leftMarginBegin = (size_t)((LineMarginLeft + (int)log10((float)numLines) + 1) * charWidth);
+//     *leftMarginEnd = (size_t)(*leftMarginBegin + LineMarginRight * charWidth);
+// }
+
+// static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuffer const* textBuff, size_t leftMarginEnd, size_t firstColumn, size_t firstLine, int charWidth, int charHeight) {
+//     // offset due to line numbers
+//     if (mouseX < leftMarginEnd) mouseX = 0;
+//     else mouseX -= leftMarginEnd;
+//     // round forward or back to nearest char
+//     mouseX += firstColumn * charWidth + charWidth / 2;
+//     mouseY += firstLine * charHeight;
+
+//     cursor->curPos.col = mouseX / charWidth;
+//     cursor->curPos.ln = mouseY / charHeight;
+
+//     // clamp y
+//     if (cursor->curPos.ln > textBuff->numLines-1)
+//         cursor->curPos.ln = textBuff->numLines-1;
+
+//     // clamp x
+//     size_t maxCols = textBuff->lines[cursor->curPos.ln]->numCols;
+//     if (cursor->curPos.col > maxCols)
+//         cursor->curPos.col = maxCols;
+// }
 
 #if 1
 int main(int argc, char** argv) {
     (void) argc; (void) argv;
     InitializeEditor();
-    
-    UpdateBuffer();
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, ed.cells.cap*sizeof(Cell), ed.cells.buff); //to update partially
 
-    ed.window.valid = false;
+    ed.textBuff = TextBufferNew(8);
+    UpdateBuffer();
+
     Uint32 const timestep = 1000 / TargetFPS;
-    Uint32 lastSecond = 0, frameCount = 0;
+    Uint32 lastSecond = 0, frameCount = 0, updateCount = 0;
 
     for (bool quit = false; !quit;) {
 
         Uint32 startTick = SDL_GetTicks();
         if (startTick > lastSecond + 1000) {
-            printf("frameCount=%d\n", frameCount);
+            char t[1024];
+            strcpy(t, ProgramTitle);
+            sprintf(t+strlen(ProgramTitle), " (FPS=%d, Updates=%d)", frameCount, updateCount);
+            SDL_SetWindowTitle(ed.window.handle, t);
             frameCount = 0;
+            updateCount = 0;
             lastSecond = startTick;
         }
-        ++frameCount;
 
         SDL_Event e;
         while (SDL_PollEvent(&e)) switch (e.type) {
@@ -827,35 +891,41 @@ int main(int argc, char** argv) {
 
             case SDL_WINDOWEVENT: { // https://wiki.libsdl.org/SDL_WindowEvent
                 // This case is handled by the event watch, because otherwise the resize blocks
+                if (e.window.event == SDL_WINDOWEVENT_RESIZED || e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                    Resize();
+                }
             } break;
 
             case SDL_KEYDOWN: {
-                SDL_Keycode code = e.key.keysym.sym;
-                SDL_Keymod mod = e.key.keysym.mod;
-                bool ctrlPressed = mod & KMOD_CTRL;
-                if ((code == SDLK_MINUS || code == SDLK_KP_MINUS) && ctrlPressed) {
-                    DecreaseFontScale();
-                }
-                else if ((code == SDLK_EQUALS || code == SDLK_KP_PLUS) && ctrlPressed) {
-                    IncreaseFontScale();
+                HandleKeyDown(&ed.textBuff, &ed.cursor, &e.key);
+                ed.isUpdated = false;
+            } break;
+
+            case SDL_TEXTINPUT: {
+                if (!(SDL_GetModState() & (KMOD_CTRL | KMOD_ALT))) {
+                    HandleTextInput(&ed.textBuff, &ed.cursor, &e.text);
+                    ed.isUpdated = false;
                 }
             } break;
         }
- 
-        UpdateBuffer();
-        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, ed.cells.cap*sizeof(Cell), ed.cells.buff); //to update partially
-
-        // if (!ed.window.valid) {
-            Repaint();
-        // }
-        // else {
-        //     // sleep if necessary
-        //     Uint32 endTick = SDL_GetTicks();
-        //     Uint32 ticksElapsed = endTick - startTick;
-        //     if (ticksElapsed < timestep) {
-        //         SDL_Delay(timestep - ticksElapsed);
-        //     }
-        // }
+        
+        if (!ed.isUpdated) {
+            UpdateBuffer();
+            glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, ed.cells.num*sizeof(Cell), ed.cells.buff); //to update partially
+            ++updateCount;
+        }
+        if (!ed.isValid) {
+            Redraw();
+            ++frameCount;
+        }
+        else {
+            // sleep if necessary
+            Uint32 endTick = SDL_GetTicks();
+            Uint32 ticksElapsed = endTick - startTick;
+            if (ticksElapsed < timestep) {
+                SDL_Delay(timestep - ticksElapsed);
+            }
+        }
     }
 
     DestroyEditor();
@@ -914,8 +984,8 @@ int main(int argc, char** argv) {
 
     int const fontCharWidth = imgWidth / ASCII_PRINTABLE_CNT;
     int const fontCharHeight = imgHeight;
-    int charWidth = (int)(fontCharWidth * FontScale);
-    int charHeight = (int)(fontCharHeight * FontScale);
+    int charWidth = (int)(fontCharWidth * InitialFontScale);
+    int charHeight = (int)(fontCharHeight * InitialFontScale);
 
     int sw, sh;
     SDL_GetWindowSize(window, &sw, &sh);
@@ -1053,14 +1123,14 @@ int main(int argc, char** argv) {
 
         if (needsRedraw) {
 
-            while (fontCharHeight * FontScale > sh) {
+            while (fontCharHeight * InitialFontScale > sh) {
                 DecreaseFontScale();
             }
-            while ((int)(fontCharWidth * FontScale) == 0 || (int)(fontCharHeight * FontScale) == 0) {
+            while ((int)(fontCharWidth * InitialFontScale) == 0 || (int)(fontCharHeight * InitialFontScale) == 0) {
                 IncreaseFontScale();
             }
-            charWidth = (int)(fontCharWidth * FontScale);
-            charHeight = (int)(fontCharHeight * FontScale);
+            charWidth = (int)(fontCharWidth * InitialFontScale);
+            charHeight = (int)(fontCharHeight * InitialFontScale);
             if (updateMargin) {
                 CalculateLeftMargin(&leftMarginBegin, &leftMarginEnd, charWidth, textBuff.numLines);
             }
@@ -1091,7 +1161,7 @@ int main(int argc, char** argv) {
                 int sx = (int)leftMarginBegin;
                 for (size_t lineNum = y+1; lineNum > 0; lineNum /= 10) {
                     sx -= charWidth;
-                    RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, lineNum % 10 + '0', sx, sy, FontScale);
+                    RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, lineNum % 10 + '0', sx, sy, InitialFontScale);
                 }
 
                 // draw line
@@ -1114,12 +1184,12 @@ int main(int argc, char** argv) {
                         };
                         SDL_CHECK_CODE(SDL_RenderFillRect(renderer, &r));
                         if (ch == ' ')
-                            RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, FontScale);
+                            RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, InitialFontScale);
                     }
                     
                     // draw character
                     if (ASCII_PRINTABLE_MIN < ch && ch <= ASCII_PRINTABLE_MAX) {
-                        RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, FontScale);
+                        RenderCharacter(renderer, fontTexture, fontCharWidth, fontCharHeight, ch, sx, sy, InitialFontScale);
                     }
                     else if (ch != ' ') {
                         // else handle non printable chars
