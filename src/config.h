@@ -48,9 +48,6 @@ extern const int ScrollYMultiplier;
 extern const float InitialFontScale;
 extern const float FontScaleMultiplier;
 
-extern const float LineMarginLeft;
-extern const float LineMarginRight;
-
 extern const unsigned int TargetFPS;
 
 #endif // CONFIG_H_

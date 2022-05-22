@@ -36,7 +36,4 @@ const int ScrollYMultiplier = 1;
 const float InitialFontScale = 2.0f;
 const float FontScaleMultiplier = 1.2f;
 
-const float LineMarginLeft = 0.5f;
-const float LineMarginRight = 1.0f;
-
 const unsigned int TargetFPS = 200;

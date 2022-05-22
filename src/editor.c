@@ -40,7 +40,8 @@ typedef struct {
 typedef struct {
     SDL_Window* handle;
     int width, height; // in pixels
-    int numRows, numCols; // in cells
+    size_t numRows, numCols; // in cells
+    size_t firstLine, firstColumn; // top left cell
     float scale;
 } Window;
 
@@ -100,13 +101,40 @@ static bool hasSelection(Cursor const* cursor) {
     return cursor->selBegin.col != cursor->selEnd.col ||
             cursor->selBegin.ln != cursor->selEnd.ln;
 }
+
 static void UpdateBuffer() {
-    size_t firstRow = 0, firstColumn = 0; // TODO: scrolling
+    size_t const lineNumWidth = (size_t)log10((float)ed.textBuff.numLines) + 1;
+
     size_t idx = 0;
-    size_t y = firstRow;
-    for (; y <= firstRow+ed.window.numRows && y < ed.textBuff.numLines; ++y) {
-        size_t x = firstColumn;
-        for (; x <= firstColumn+ed.window.numCols && x < ed.textBuff.lines[y]->numCols; ++x) {
+    size_t y = ed.window.firstLine;
+    for (; y <= ed.window.firstLine+ed.window.numRows && y < ed.textBuff.numLines; ++y) {
+        size_t lineNumIdx = idx+lineNumWidth-1;
+        size_t widthIdx = 0, lineNum = y+1;
+        for (;
+            widthIdx < lineNumWidth && lineNum > 0;
+            ++widthIdx, lineNum /= 10)
+        {
+            ed.cells.buff[lineNumIdx].bgCol = PaletteBG;
+            ed.cells.buff[lineNumIdx].fgCol = PaletteFG;
+            ed.cells.buff[lineNumIdx--].glyphIdx = lineNum % 10 + '0' - ASCII_PRINTABLE_MIN;
+        }
+
+        for (; widthIdx < lineNumWidth; ++widthIdx) {
+            ed.cells.buff[lineNumIdx].bgCol = PaletteBG;
+            ed.cells.buff[lineNumIdx--].fgCol = PaletteBG;
+        }
+        if (ed.window.numCols < lineNumWidth) {
+            idx += ed.window.numCols+1;
+            continue;
+        }
+        idx += lineNumWidth;
+        ed.cells.buff[idx].bgCol = PaletteBG;
+        ed.cells.buff[idx++].fgCol = PaletteBG;
+        if (lineNumWidth+1 > ed.window.firstColumn+ed.window.numCols) {
+            continue;
+        }
+        size_t x = ed.window.firstColumn;
+        for (; x <= ed.window.firstColumn+ed.window.numCols-(lineNumWidth+1) && x < ed.textBuff.lines[y]->numCols; ++x) {
             ed.cells.buff[idx].bgCol = PaletteBG;
             ed.cells.buff[idx].fgCol = PaletteFG;
             // text select
@@ -117,33 +145,39 @@ static void UpdateBuffer() {
             }
             ed.cells.buff[idx++].glyphIdx = ed.textBuff.lines[y]->buff[x]-ASCII_PRINTABLE_MIN;
         }
-        for (; x <= firstColumn+ed.window.numCols; ++x) {
+        for (; x <= ed.window.firstColumn+ed.window.numCols-(lineNumWidth+1); ++x) {
             ed.cells.buff[idx].bgCol = PaletteBG;
             ed.cells.buff[idx].fgCol = PaletteBG;
             ed.cells.buff[idx++].glyphIdx = 0;
         }
     }
-    for (; y <= firstRow+ed.window.numRows; ++y) {
-        for (size_t x = 0; x <= firstColumn+ed.window.numCols; ++x) {
+    for (; y <= ed.window.firstLine+ed.window.numRows; ++y) {
+        for (size_t x = 0; x <= ed.window.firstColumn+ed.window.numCols; ++x) {
             ed.cells.buff[idx].bgCol = PaletteBG;
             ed.cells.buff[idx].fgCol = PaletteBG;
             ed.cells.buff[idx++].glyphIdx = 0;
         }
     }
 
-    
     // cursor
-    idx = ed.cursor.curPos.ln*(ed.window.numCols+1) + ed.cursor.curPos.col;
-    if (isSelecting(&ed.cursor)) {
-        ed.cells.buff[idx].bgCol = PaletteG1;
+    size_t cx = ed.cursor.curPos.col-ed.window.firstColumn+lineNumWidth+1;
+    size_t cy = ed.cursor.curPos.ln-ed.window.firstLine;
+    if (cx <= ed.window.numCols && cy <= ed.window.numRows) {
+        idx = cy * (ed.window.numCols+1) + cx;
         ed.cells.buff[idx].fgCol = PaletteBG;
-        // sel cursor
-        idx = ed.cursor.curSel.ln*(ed.window.numCols+1) + ed.cursor.curSel.col;
-        ed.cells.buff[idx].bgCol = PaletteR1;
-        ed.cells.buff[idx].fgCol = PaletteBG;
+        if (hasSelection(&ed.cursor)) {
+            ed.cells.buff[idx].bgCol = PaletteG1;
+        }
+        else {
+            ed.cells.buff[idx].bgCol = PaletteFG;
+        }
     }
-    else {
-        ed.cells.buff[idx].bgCol = PaletteFG;
+    // sel cursor
+    size_t sx = ed.cursor.curSel.col-ed.window.firstColumn+lineNumWidth+1;
+    size_t sy = ed.cursor.curSel.ln-ed.window.firstLine;
+    if (sx <= ed.window.numCols && sy <= ed.window.numRows && hasSelection(&ed.cursor)) {
+        idx = sy * (ed.window.numCols+1) + sx;
+        ed.cells.buff[idx].bgCol = PaletteR1;
         ed.cells.buff[idx].fgCol = PaletteBG;
     }
 
@@ -815,50 +849,47 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
 }
 
 
-// static void ClampBetween(size_t* x, size_t l, size_t n) {
-//     if (*x > l) {
-//         *x = l;
-//     }
-//     else if (l > *x+n) {
-//         *x = l-n;
-//     }
-// }
+static void ClampBetween(size_t* x, size_t l, size_t n) {
+    if (*x > l) {
+        *x = l;
+    }
+    else if (l > *x+n) {
+        *x = l-n;
+    }
+}
 
-// static void CursorAutoscroll(
-//     size_t* firstLine, size_t* firstColumn,
-//     size_t cursorLn, size_t cursorCol,
-//     size_t numRows, size_t numCols)
-// {
-//     ClampBetween(firstLine, cursorLn, numRows-1);
-//     ClampBetween(firstColumn, cursorCol, numCols-1);
-// }
+static void CursorAutoscroll() {
+    size_t const lineNumWidth = (size_t)log10((float)ed.textBuff.numLines) + 1;
+    ClampBetween(&ed.window.firstLine, ed.cursor.curPos.ln, ed.window.numRows-1);
+    ClampBetween(&ed.window.firstColumn, ed.cursor.curPos.col, ed.window.numCols-1-(lineNumWidth+1)); // probably underflows
+}
 
-// static void CalculateLeftMargin(size_t* leftMarginBegin, size_t* leftMarginEnd, size_t charWidth, size_t numLines) {
-//     // numLines should never be zero so log is fine
-//     *leftMarginBegin = (size_t)((LineMarginLeft + (int)log10((float)numLines) + 1) * charWidth);
-//     *leftMarginEnd = (size_t)(*leftMarginBegin + LineMarginRight * charWidth);
-// }
+static void ScreenToCursor(size_t mouseX, size_t mouseY) {
+    int fontCharWidth = ed.fontSrc.width / ASCII_PRINTABLE_CNT;
+    int fontCharHeight = ed.fontSrc.height;
+    float charWidth = fontCharWidth * ed.window.scale;
+    float charHeight = fontCharHeight * ed.window.scale;
 
-// static void ScreenToCursor(Cursor* cursor, size_t mouseX, size_t mouseY, TextBuffer const* textBuff, size_t leftMarginEnd, size_t firstColumn, size_t firstLine, int charWidth, int charHeight) {
-//     // offset due to line numbers
-//     if (mouseX < leftMarginEnd) mouseX = 0;
-//     else mouseX -= leftMarginEnd;
-//     // round forward or back to nearest char
-//     mouseX += firstColumn * charWidth + charWidth / 2;
-//     mouseY += firstLine * charHeight;
+    size_t lineNumWidth = (size_t)log10((float)ed.textBuff.numLines) + 1;
+    size_t leftMarginEnd = (lineNumWidth+1)*charWidth;
+    // offset due to line numbers
+    if (mouseX < leftMarginEnd) mouseX = 0;
+    else mouseX -= leftMarginEnd;
 
-//     cursor->curPos.col = mouseX / charWidth;
-//     cursor->curPos.ln = mouseY / charHeight;
+    mouseX += ed.window.firstColumn * charWidth;
+    mouseY += ed.window.firstLine * charHeight;
+    ed.cursor.curPos.col = mouseX / charWidth;
+    ed.cursor.curPos.ln = mouseY / charHeight;
 
-//     // clamp y
-//     if (cursor->curPos.ln > textBuff->numLines-1)
-//         cursor->curPos.ln = textBuff->numLines-1;
+    // clamp y
+    if (ed.cursor.curPos.ln > ed.textBuff.numLines-1)
+        ed.cursor.curPos.ln = ed.textBuff.numLines-1;
 
-//     // clamp x
-//     size_t maxCols = textBuff->lines[cursor->curPos.ln]->numCols;
-//     if (cursor->curPos.col > maxCols)
-//         cursor->curPos.col = maxCols;
-// }
+    // clamp x
+    size_t maxCols = ed.textBuff.lines[ed.cursor.curPos.ln]->numCols;
+    if (ed.cursor.curPos.col > maxCols)
+        ed.cursor.curPos.col = maxCols;
+}
 
 #if 1
 int main(int argc, char** argv) {
@@ -898,16 +929,91 @@ int main(int argc, char** argv) {
                 }
             } break;
 
-            case SDL_KEYDOWN: {
-                HandleKeyDown(&ed.textBuff, &ed.cursor, &e.key);
-                ed.isUpdated = false;
+
+            case SDL_MOUSEMOTION: {
+                // mouse drag selection
+                if (ed.cursor.mouseSelecting) {
+                    size_t mouseX = e.motion.x < 0 ? 0 : e.motion.x;
+                    size_t mouseY = e.motion.y < 0 ? 0 : e.motion.y;
+                    ScreenToCursor(mouseX, mouseY);
+                    UpdateSelection(&ed.cursor);
+                    ed.isUpdated = false;
+                }
             } break;
+
+            case SDL_MOUSEBUTTONDOWN: {
+                if (e.button.button == SDL_BUTTON_LEFT) {
+                    ed.cursor.mouseSelecting = true;
+                    size_t mouseX = e.button.x < 0 ? 0 : e.button.x;
+                    size_t mouseY = e.button.y < 0 ? 0 : e.button.y;
+
+                    ScreenToCursor(mouseX, mouseY);
+                    ed.cursor.colMax = ed.cursor.curPos.col;
+                    
+                    ed.cursor.curSel.col = ed.cursor.curPos.col;
+                    ed.cursor.curSel.ln = ed.cursor.curPos.ln;
+                    UpdateSelection(&ed.cursor);
+                    ed.isUpdated = false;
+                }
+            } break;
+
+            case SDL_MOUSEBUTTONUP: {
+                if (e.button.button == SDL_BUTTON_LEFT) {
+                    ed.cursor.mouseSelecting = false;
+                    ed.isUpdated = false;
+                }
+            } break;
+
+            case SDL_MOUSEWHEEL: {
+                // TODO: horizontal scrolling
+                Sint32 dx = e.wheel.x, dy = e.wheel.y;
+                dx *= ScrollXMultiplier;
+                dy *= ScrollYMultiplier;
+                if (InvertScrollX) dx *= -1;
+                if (InvertScrollY) dy *= -1;
+
+                // vertical scrolling
+                if (dy) {
+                    if (SDL_GetModState() & KMOD_CTRL) {
+                        if (dy > 0) { // zoom in
+                            IncreaseFontScale();
+                        }
+                        else { // zoom out
+                            DecreaseFontScale();
+                        }
+                        ed.isUpdated = false;
+                    }
+                    else if ((dy > 0 && ed.window.firstLine >= (size_t)dy) || // up
+                             (dy < 0 && ed.window.firstLine + (-dy) < ed.textBuff.numLines)) // down
+                    {
+                        ed.window.firstLine -= dy;
+                        ed.isUpdated = false;
+                    }
+                }
+                // horizontal scrolling
+                if (dx) {
+                    if ((dx > 0) || // right
+                        (dx < 0 && ed.window.firstColumn >= (size_t)(-dx))) // left
+                    {
+                        ed.window.firstColumn += dx;
+                        ed.isUpdated = false;
+                    }
+                }
+            } break;
+
 
             case SDL_TEXTINPUT: {
                 if (!(SDL_GetModState() & (KMOD_CTRL | KMOD_ALT))) {
                     HandleTextInput(&ed.textBuff, &ed.cursor, &e.text);
+                    CursorAutoscroll();
                     ed.isUpdated = false;
                 }
+            } break;
+
+            case SDL_KEYDOWN: {
+                HandleKeyDown(&ed.textBuff, &ed.cursor, &e.key);
+                CursorAutoscroll();
+                ed.isUpdated = false;
             } break;
         }
         
