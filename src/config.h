@@ -2,6 +2,7 @@
 #define CONFIG_H_
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define ASCII_PRINTABLE_MIN (' ')
 #define ASCII_PRINTABLE_MAX ('~')
@@ -19,25 +20,25 @@ extern const char* FontFilename;
 extern const char* VertexShaderFilename;
 extern const char* FragmentShaderFilename;
 
-extern const int PaletteHL;
-extern const int PaletteBG;
-extern const int PaletteFG;
-extern const int PaletteK1;
-extern const int PaletteR1;
-extern const int PaletteG1;
-extern const int PaletteY1;
-extern const int PaletteB1;
-extern const int PaletteM1;
-extern const int PaletteC1;
-extern const int PaletteW1;
-extern const int PaletteK2;
-extern const int PaletteR2;
-extern const int PaletteG2;
-extern const int PaletteY2;
-extern const int PaletteB2;
-extern const int PaletteM2;
-extern const int PaletteC2;
-extern const int PaletteW2;
+extern const uint32_t PaletteHL;
+extern const uint32_t PaletteBG;
+extern const uint32_t PaletteFG;
+extern const uint32_t PaletteK1;
+extern const uint32_t PaletteR1;
+extern const uint32_t PaletteG1;
+extern const uint32_t PaletteY1;
+extern const uint32_t PaletteB1;
+extern const uint32_t PaletteM1;
+extern const uint32_t PaletteC1;
+extern const uint32_t PaletteW1;
+extern const uint32_t PaletteK2;
+extern const uint32_t PaletteR2;
+extern const uint32_t PaletteG2;
+extern const uint32_t PaletteY2;
+extern const uint32_t PaletteB2;
+extern const uint32_t PaletteM2;
+extern const uint32_t PaletteC2;
+extern const uint32_t PaletteW2;
 
 extern const int TabSize;
 extern const bool InvertScrollX;

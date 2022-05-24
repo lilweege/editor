@@ -1,3 +1,4 @@
+#include "trash-lang/src/tokenizer.h"
 #include "cursor.h"
 #include "textbuffer.h"
 #include "error.h"
@@ -129,6 +130,77 @@ static void UpdateBuffer() {
         }
     }
 
+
+    
+    for (y = ed.window.firstLine;
+        y <= ed.window.firstLine+ed.window.numRows && y < ed.textBuff.numLines;
+        ++y)
+    {
+        Tokenizer line = {
+            .source = {
+                .data = ed.textBuff.lines[y]->buff,
+                .size = ed.textBuff.lines[y]->numCols,
+            }
+        };
+        
+        while (pollTokenWithComments(&line).err == TOKENIZER_ERROR_NONE) {
+            uint32_t tokenColor = PaletteFG;
+            switch (line.nextToken.kind) {
+                case TOKEN_COMMENT:
+                    tokenColor = PaletteK2;
+                    break;
+                case TOKEN_IF:
+                case TOKEN_ELSE:
+                case TOKEN_WHILE:
+                case TOKEN_OPERATOR_POS:
+                case TOKEN_OPERATOR_NEG:
+                case TOKEN_OPERATOR_MUL:
+                case TOKEN_OPERATOR_DIV:
+                case TOKEN_OPERATOR_MOD:
+                case TOKEN_OPERATOR_EQ:
+                case TOKEN_OPERATOR_NE:
+                case TOKEN_OPERATOR_GE:
+                case TOKEN_OPERATOR_GT:
+                case TOKEN_OPERATOR_LE:
+                case TOKEN_OPERATOR_LT:
+                case TOKEN_OPERATOR_NOT:
+                case TOKEN_OPERATOR_AND:
+                case TOKEN_OPERATOR_OR:
+                case TOKEN_OPERATOR_ASSIGN:
+                    tokenColor = PaletteR1;
+                    break;
+                case TOKEN_TYPE:
+                    tokenColor = PaletteB1;
+                    break;
+                case TOKEN_INTEGER_LITERAL:
+                case TOKEN_FLOAT_LITERAL:
+                    tokenColor = PaletteM1;
+                    break;
+                case TOKEN_STRING_LITERAL:
+                case TOKEN_CHAR_LITERAL:
+                    tokenColor = PaletteY1;
+                default: break;
+            }
+            // these are ints because horizontal scrolling makes these negative
+            int tx = line.nextToken.pos.col-1-ed.window.firstColumn+lineNumWidth+1;
+            int sz = line.nextToken.text.size;
+            if (line.nextToken.kind == TOKEN_CHAR_LITERAL || 
+                line.nextToken.kind == TOKEN_STRING_LITERAL)
+            {
+                tx -= 2;
+                sz += 2;
+            }
+            line.nextToken.kind = TOKEN_NONE;
+            if (tokenColor == PaletteFG) continue;
+            for (int x = tx; x < tx+sz; ++x) {
+                if ((int)lineNumWidth+1 <= x && x <= (int)ed.window.numCols) {
+                    size_t idx = (y-ed.window.firstLine) * (ed.window.numCols+1) + x;
+                    ed.cells.buff[idx].fgCol = tokenColor;
+                }
+            }
+        }
+    }
+    
     // cursor
     size_t cx = ed.cursor.curPos.col-ed.window.firstColumn+lineNumWidth+1;
     size_t cy = ed.cursor.curPos.ln-ed.window.firstLine;
