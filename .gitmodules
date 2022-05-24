@@ -1,0 +1,3 @@
+[submodule "src/trash-lang"]
+	path = src/trash-lang
+	url = https://github.com/lilweege/trash-lang/
