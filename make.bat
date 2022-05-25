@@ -37,7 +37,7 @@ goto :EOF
         echo Missing dependencies, run `make install` first.
         goto :EOF
     :ready
-    cl %CFLAGS% %INCLUDES% /Febin\editor /Fdbin\vc /Fo.\obj\ src\*.c /link %LIBS% /SUBSYSTEM:%SUBSYS%
+    cl %CFLAGS% %INCLUDES% /Febin\editor /Fdbin\vc /Fo.\obj\ src\*.c src\trash-lang\src\stringview.c src\trash-lang\src\tokenizer.c /link %LIBS% /SUBSYSTEM:%SUBSYS%
 goto :EOF
 
 :install
