@@ -147,7 +147,7 @@ static void UpdateBuffer() {
             uint32_t tokenColor = PaletteFG;
             switch (line.nextToken.kind) {
                 case TOKEN_COMMENT:
-                    tokenColor = PaletteK2;
+                    tokenColor = PaletteK;
                     break;
                 case TOKEN_IF:
                 case TOKEN_ELSE:
@@ -167,18 +167,18 @@ static void UpdateBuffer() {
                 case TOKEN_OPERATOR_AND:
                 case TOKEN_OPERATOR_OR:
                 case TOKEN_OPERATOR_ASSIGN:
-                    tokenColor = PaletteR1;
+                    tokenColor = PaletteR;
                     break;
                 case TOKEN_TYPE:
-                    tokenColor = PaletteB1;
+                    tokenColor = PaletteB;
                     break;
                 case TOKEN_INTEGER_LITERAL:
                 case TOKEN_FLOAT_LITERAL:
-                    tokenColor = PaletteM1;
+                    tokenColor = PaletteM;
                     break;
                 case TOKEN_STRING_LITERAL:
                 case TOKEN_CHAR_LITERAL:
-                    tokenColor = PaletteY1;
+                    tokenColor = PaletteY;
                 default: break;
             }
             // these are ints because horizontal scrolling makes these negative
@@ -209,7 +209,7 @@ static void UpdateBuffer() {
     {
         idx = cy * (ed.window.numCols+1) + cx;
         if (hasSelection(&ed.cursor)) {
-            ed.cells.buff[idx].bgCol = PaletteG1;
+            ed.cells.buff[idx].bgCol = PaletteG;
         }
         else {
             ed.cells.buff[idx].bgCol = PaletteFG;
@@ -230,7 +230,7 @@ static void UpdateBuffer() {
         hasSelection(&ed.cursor))
     {
         idx = sy * (ed.window.numCols+1) + sx;
-        ed.cells.buff[idx].bgCol = PaletteG1;
+        ed.cells.buff[idx].bgCol = PaletteG;
         if (ed.cursor.curSel.col >= ed.textBuff.lines[ed.cursor.curSel.ln]->numCols) {
             ed.cells.buff[idx].fgCol = ed.cells.buff[idx].bgCol;
         }
