@@ -1,6 +1,8 @@
 #include "cursor.h"
+#include "trash-lang/src/stringview.h"
 
 #include <assert.h>
+#include <ctype.h>
 
 static bool lexLe(size_t y0, size_t x0, size_t y1, size_t x1) {
     // (y0,x0) <=_lex (y1,x1)
@@ -21,13 +23,11 @@ bool hasSelection(Cursor const* cursor) {
             cursor->selBegin.ln != cursor->selEnd.ln;
 }
 
-static bool isWhitespace(char c) {
-    return c <= ' ' || c > '~';
-}
+static bool isWhitespace(char c) { return c <= ' ' || c > '~'; }
+static bool isText(char c) { return isalnum(c); }
 
 CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur) {
     // assumes cur is a valid pos
-    bool seenDelim = false;
     // wrap if at end of line
     if (cur.col == tb->lines[cur.ln]->numCols) {
         // return if past end of buff
@@ -36,20 +36,19 @@ CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur) {
         }
         cur.ln += 1;
         cur.col = 0;
-        seenDelim = true;
     }
     
     // this block logic is way simpler than others, mostly because handling all that is pain
-    
+    bool seenText = false;
     for (size_t n = tb->lines[cur.ln]->numCols;
         cur.col < n;
         ++cur.col)
     {
         char c = tb->lines[cur.ln]->buff[cur.col];
-        if (isWhitespace(c)) {
-            seenDelim = true;
+        if (isText(c)) {
+            seenText = true;
         }
-        else if (seenDelim) {
+        else if (seenText) {
             break;
         }
     }
@@ -76,12 +75,11 @@ CursorPos TextBuffPrevBlockPos(TextBuffer const* tb, CursorPos cur) {
         --cur.col)
     {
         char c = tb->lines[cur.ln]->buff[cur.col];
-        if (isWhitespace(c)) {
-            if (seenText)
-                break;
-        }
-        else {
+        if (isText(c)) {
             seenText = true;
+        }
+        else if (seenText) {
+            break;
         }
     }
     ++cur.col;
