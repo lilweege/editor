@@ -123,7 +123,7 @@ static void UpdateBuffer() {
         }
     }
     for (; y <= ed.window.firstLine+ed.window.numRows; ++y) {
-        for (size_t x = 0; x <= ed.window.firstColumn+ed.window.numCols; ++x) {
+        for (size_t x = 0; x <= ed.window.numCols; ++x) {
             ed.cells.buff[idx].bgCol = PaletteBG;
             ed.cells.buff[idx].fgCol = PaletteBG;
             ed.cells.buff[idx++].glyphIdx = 0;
