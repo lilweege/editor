@@ -207,8 +207,8 @@ static void UpdateBuffer() {
                 default: break;
             }
             // these are ints because horizontal scrolling makes these negative
-            int tx = line.nextToken.pos.col-1-ed.window.firstColumn+lineNumWidth+1;
-            int sz = line.nextToken.text.size;
+            int tx = (int)(line.nextToken.pos.col-1-ed.window.firstColumn+lineNumWidth+1);
+            int sz = (int)(line.nextToken.text.size);
             if (line.nextToken.kind == TOKEN_CHAR_LITERAL || 
                 line.nextToken.kind == TOKEN_STRING_LITERAL)
             {
@@ -219,7 +219,7 @@ static void UpdateBuffer() {
             if (tokenColor == PaletteFG) continue;
             for (int x = tx; x < tx+sz; ++x) {
                 if ((int)lineNumWidth+1 <= x && x <= (int)ed.window.numCols) {
-                    size_t idx = (y-ed.window.firstLine) * (ed.window.numCols+1) + x;
+                    idx = (y-ed.window.firstLine) * (ed.window.numCols+1) + x;
                     ed.cells.buff[idx].fgCol = tokenColor;
                 }
             }
@@ -311,7 +311,7 @@ static void IncreaseFontScale() {
     }
     ed.window.scale *= FontScaleMultiplier;
     UpdateDimensions();
-    glUniform2i(ed.gl.uWindowSize, ed.window.numCols, ed.window.numRows);
+    glUniform2i(ed.gl.uWindowSize, (GLint)ed.window.numCols, (GLint)ed.window.numRows);
     glUniform1f(ed.gl.uFontScale, ed.window.scale);
 }
 static void DecreaseFontScale() {
@@ -324,14 +324,14 @@ static void DecreaseFontScale() {
     }
     ed.window.scale /= FontScaleMultiplier;
     UpdateDimensions();
-    glUniform2i(ed.gl.uWindowSize, ed.window.numCols, ed.window.numRows);
+    glUniform2i(ed.gl.uWindowSize, (GLint)ed.window.numCols, (GLint)ed.window.numRows);
     glUniform1f(ed.gl.uFontScale, ed.window.scale);
 }
 static void Resize() {
     SDL_GetWindowSize(ed.window.handle, &ed.window.width, &ed.window.height);
     glViewport(0, 0, ed.window.width, ed.window.height);
     UpdateDimensions();
-    glUniform2i(ed.gl.uWindowSize, ed.window.numCols, ed.window.numRows);
+    glUniform2i(ed.gl.uWindowSize, (GLint)ed.window.numCols, (GLint)ed.window.numRows);
     ed.isValid = false;
 }
 
@@ -432,7 +432,7 @@ static void InitializeEditor() {
     glUniform2i(ed.gl.uCellSize, fontCharWidth, fontCharHeight);
     UpdateDimensions();
     glUniform1f(ed.gl.uFontScale, ed.window.scale);
-    glUniform2i(ed.gl.uWindowSize, ed.window.numCols, ed.window.numRows);
+    glUniform2i(ed.gl.uWindowSize, (GLint)ed.window.numCols, (GLint)ed.window.numRows);
 
     glGenBuffers(1, &ed.gl.ssbo);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ed.gl.ssbo);
@@ -791,15 +791,15 @@ static void ScreenToCursor(size_t mouseX, size_t mouseY) {
     float charHeight = fontCharHeight * ed.window.scale;
 
     size_t lineNumWidth = (size_t)log10((float)ed.textBuff.numLines) + 1;
-    size_t leftMarginEnd = (lineNumWidth+1)*charWidth;
+    size_t leftMarginEnd = (size_t)((lineNumWidth+1)*charWidth);
     // offset due to line numbers
     if (mouseX < leftMarginEnd) mouseX = 0;
     else mouseX -= leftMarginEnd;
 
-    mouseX += ed.window.firstColumn * charWidth;
-    mouseY += ed.window.firstLine * charHeight;
-    ed.cursor.curPos.col = mouseX / charWidth;
-    ed.cursor.curPos.ln = mouseY / charHeight;
+    mouseX += (size_t)(ed.window.firstColumn * charWidth);
+    mouseY += (size_t)(ed.window.firstLine * charHeight);
+    ed.cursor.curPos.col = (size_t)(mouseX / charWidth);
+    ed.cursor.curPos.ln = (size_t)(mouseY / charHeight);
 
     // clamp y
     if (ed.cursor.curPos.ln > ed.textBuff.numLines-1)
@@ -818,7 +818,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    char fnBuff[strlen(DefaultFilename) + 25];
+    char fnBuff[sizeof(DefaultFilename) + 25];
     char* sourceContents;
     size_t sourceLen;
 
@@ -906,7 +906,7 @@ int main(int argc, char** argv) {
             case SDL_MOUSEMOTION: {
                 // update cursor style
                 int fontCharWidth = ed.fontSrc.width / ASCII_PRINTABLE_CNT;
-                int charWidth = fontCharWidth * ed.window.scale;
+                int charWidth = (int)(fontCharWidth * ed.window.scale);
                 int lineNumWidth = (int)log10((float)ed.textBuff.numLines) + 1;
                 int leftMarginEnd = (lineNumWidth+1) * charWidth;
 

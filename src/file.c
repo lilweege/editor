@@ -67,7 +67,7 @@ int OpenAndReadFile(FilePath path, const char* filename, size_t* outSize, char**
         fp = fopen(filename, "rb");
     }
 
-    int err = ReadFile(fp, outSize, outBuff);
+    int err = ReadFileContents(fp, outSize, outBuff);
     if (fp) fclose(fp);
     return err;
 }
@@ -78,7 +78,7 @@ int OpenAndReadFile(FilePath path, const char* filename, size_t* outSize, char**
 // 1 file error (errno)
 // 2 feof
 // 3 ferror
-int ReadFile(FILE* fp, size_t* outSize, char** outBuff) {
+int ReadFileContents(FILE* fp, size_t* outSize, char** outBuff) {
     assert(outBuff != NULL);
 
     // open file
@@ -148,12 +148,12 @@ int OpenAndWriteFile(FilePath path, const char* filename, const char* buff, size
         fp = fopen(filename, "wb");
     }
 
-    int err = WriteFile(fp, buff, size);
+    int err = WriteFileContents(fp, buff, size);
     if (fp) fclose(fp);
     return err;
 }
 
-int WriteFile(FILE* fp, const char* buff, size_t size) {
+int WriteFileContents(FILE* fp, const char* buff, size_t size) {
     if (fp == NULL) {
         return 1;
     }

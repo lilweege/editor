@@ -18,11 +18,11 @@ char* AbsoluteFilePath(const char* filename);
 
 char* OpenAndReadFileOrCrash(FilePath path, const char* filename, size_t* outSize);
 int OpenAndReadFile(FilePath path, const char* filename, size_t* outSize, char** outBuff);
-int ReadFile(FILE* fp, size_t* outSize, char** outBuff);
+int ReadFileContents(FILE* fp, size_t* outSize, char** outBuff);
 
 void OpenAndWriteFileOrCrash(FilePath path, const char* filename, const char* buff, size_t size);
 int OpenAndWriteFile(FilePath path, const char* filename, const char* buff, size_t size);
-int WriteFile(FILE* fp, const char* buff, size_t size);
+int WriteFileContents(FILE* fp, const char* buff, size_t size);
 
 
 
