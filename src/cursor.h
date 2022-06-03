@@ -30,5 +30,7 @@ void StopSelecting(Cursor* cursor);
 void EraseBetween(TextBuffer* tb, Cursor* cursor, CursorPos begin, CursorPos end);
 void EraseSelection(TextBuffer* tb, Cursor* cursor);
 
+void ExtractText(TextBuffer* tb, CursorPos selBegin, CursorPos selEnd, char** outBuff, size_t* outSize);
+void InsertText(TextBuffer* tb, Cursor* cursor, const char* s, size_t n);
 
 #endif // CURSOR_H_

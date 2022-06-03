@@ -42,7 +42,7 @@ static bool CompileShaderSource(const GLchar *source, GLenum shaderType, GLuint 
 
 bool CompileShader(const char* filename, GLenum shaderType, GLuint* shader) {
     size_t fileSize;
-    char* fileContents = ReadFileOrCrash(filename, &fileSize);
+    char* fileContents = OpenAndReadFileOrCrash(FilePathRelativeToBin, filename, &fileSize);
     bool success = CompileShaderSource(fileContents, shaderType, shader);
     free(fileContents);
     return success;

@@ -16,6 +16,7 @@
 extern const int InitialWindowWidth;
 extern const int InitialWindowHeight;
 extern const char* ProgramTitle;
+extern const char* DefaultFilename;
 extern const char* FontFilename;
 extern const char* VertexShaderFilename;
 extern const char* FragmentShaderFilename;

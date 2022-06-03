@@ -29,6 +29,11 @@ typedef struct {
 } Image;
 
 typedef struct {
+    const char* buff;
+    size_t size;
+} Filename;
+
+typedef struct {
     SDL_Window* handle;
     int width, height; // in pixels
     size_t numRows, numCols; // in cells
@@ -62,6 +67,7 @@ typedef struct {
     Window window;
     GLContext gl;
     CellBuffer cells;
+    Filename filename;
 
     TextBuffer textBuff;
     Cursor cursor;
@@ -71,6 +77,25 @@ typedef struct {
 } Editor;
 
 static Editor ed;
+
+
+// removes all unsupported characters (particularly \r and non-ascii)
+// non restrict buffers, since a common use case is to clean in place
+static void CleanInput(const char* inBuff, size_t inSize, char* outBuff, size_t* outSize) {
+    assert(outBuff != NULL);
+
+    size_t size = 0;
+    for (size_t i = 0; i < inSize; ++i) {
+        char c = inBuff[i];
+        if ((ASCII_PRINTABLE_MIN <= c && c <= ASCII_PRINTABLE_MAX) || (c == '\n')) {
+            outBuff[size++] = c;
+        }
+    }
+
+    if (outSize != NULL) {
+        *outSize = size;
+    }
+}
 
 
 static void UpdateBuffer() {
@@ -329,7 +354,6 @@ static int EditorResizeEvent(void* data, SDL_Event* event) {
 static void InitializeEditor() {
     SDL_CHECK_CODE(SDL_Init(SDL_INIT_VIDEO));
 
-    memset(&ed, 0, sizeof(ed));
     ed.window.width = InitialWindowWidth;
     ed.window.height = InitialWindowHeight;
     ed.window.scale = InitialFontScale;
@@ -676,7 +700,22 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
             default: assert(0 && "Unreachable"); break;
         }
     }
-    // TODO: ctrl+o,s,d,f,z,y
+    // TODO: ctrl+z,y,d,f
+    else if (code == SDLK_s && ctrlPressed) {
+        // TODO: check the filename immediately before saving as well
+        // this matters if more than one editor is opened at once
+        char* text;
+        size_t textSize;
+        ExtractText(tb,
+                (CursorPos) { 0, 0 },
+                (CursorPos) { tb->numLines-1, tb->lines[tb->numLines-1]->numCols },
+                &text, &textSize);
+        if (!DoesFileExist(ed.filename.buff)) {
+            assert(CreateFileIfNotExist(ed.filename.buff));
+        }
+        OpenAndWriteFileOrCrash(FilePathRelativeToCWD, ed.filename.buff, text, textSize);
+        free(text);
+    }
     else if (code == SDLK_a && ctrlPressed) {
         cursor->curSel.col = 0;
         cursor->curSel.ln = 0;
@@ -686,38 +725,9 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
     }
     else if ((code == SDLK_c || code == SDLK_x) && ctrlPressed) {
         // cut/copy
-        size_t n = cursor->selEnd.col;
-        for (size_t ln = cursor->selBegin.ln;
-            ln < cursor->selEnd.ln;
-            ++ln)
-        {
-            n += tb->lines[ln]->numCols+1;
-        }
-        n -= cursor->selBegin.col;
-        char* buff = malloc(n+1);
-        if (buff == NULL) {
-            PANIC_HERE("MALLOC", "Could not allocate clipboard buffer");
-        }
-        if (cursor->selBegin.ln == cursor->selEnd.ln) {
-            memcpy(buff,
-                tb->lines[cursor->selBegin.ln]->buff + cursor->selBegin.col,
-                cursor->selEnd.col - cursor->selBegin.col);
-        }
-        else {
-            size_t i = tb->lines[cursor->selBegin.ln]->numCols - cursor->selBegin.col;
-            memcpy(buff, tb->lines[cursor->selBegin.ln]->buff + cursor->selBegin.col, i);
-            buff[i++] = '\n';
-            for (size_t ln = cursor->selBegin.ln+1;
-                ln < cursor->selEnd.ln; ++ln)
-            {
-                size_t sz = tb->lines[ln]->numCols;
-                memcpy(buff+i, tb->lines[ln]->buff, sz);
-                i += sz;
-                buff[i++] = '\n';
-            }
-            memcpy(buff+i, tb->lines[cursor->selEnd.ln]->buff, cursor->selEnd.col);
-        }
-        buff[n] = 0;
+        char* buff;
+        size_t size;
+        ExtractText(tb, cursor->selBegin, cursor->selEnd, &buff, &size);
         SDL_SetClipboardText(buff);
         free(buff);
         if (code == SDLK_x) { // cut
@@ -735,36 +745,11 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
             if (clip[0] == '\0') {
                 SDL_ERROR_HERE();
             }
-            size_t lineIdx[1024]; // FIXME
-            size_t nLines = 0;
-            size_t n = 0;
-            for (; clip[n] != '\0'; ++n) {
-                if (clip[n] == '\n') {
-                    lineIdx[nLines++] = n;
-                    assert(nLines < 1024);
-                }
-            }
-            lineIdx[nLines] = n;
-            TextBufferInsert(tb, nLines, cursor->curPos.ln+1);
-            if (nLines > 0) {
-                // split line
-                LineBufferInsertStr(tb->lines + cursor->curPos.ln + nLines,
-                    tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
-                    tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
-                    0);
-                LineBufferErase(tb->lines + cursor->curPos.ln,
-                    tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
-                    cursor->curPos.col);
-            }
-            LineBufferInsertStr(tb->lines+(cursor->curPos.ln),
-                clip, lineIdx[0], cursor->curPos.col);
-            cursor->curPos.col += lineIdx[0];
-            for (size_t i = 0; i < nLines; ++i) {
-                size_t sz = lineIdx[i+1]-lineIdx[i]-1;
-                LineBufferInsertStr(tb->lines+(++cursor->curPos.ln),
-                    clip+lineIdx[i]+1, sz, 0);
-                cursor->curPos.col = sz;
-            }
+
+            size_t n = strlen(clip);
+            CleanInput(clip, n, clip, &n);
+
+            InsertText(tb, cursor, clip, n);
             SDL_free(clip);
         }
     }
@@ -827,7 +812,44 @@ static void ScreenToCursor(size_t mouseX, size_t mouseY) {
 }
 
 int main(int argc, char** argv) {
-    (void) argc; (void) argv;
+    assert(argc >= 1);
+    if (argc != 1 && argc != 2) {
+        fprintf(stderr, "Usage: %s [filename]\n", argv[0]);
+        exit(1);
+    }
+
+    char fnBuff[strlen(DefaultFilename) + 25];
+    char* sourceContents;
+    size_t sourceLen;
+
+    if (argc == 2) {
+        ed.filename.buff = argv[1];
+        ed.filename.size = strlen(argv[1]);
+
+        if (!DoesFileExist(ed.filename.buff)) {
+            CreateFileIfNotExist(ed.filename.buff);
+        }
+
+        sourceContents = OpenAndReadFileOrCrash(FilePathRelativeToCWD, ed.filename.buff, &sourceLen);
+        CleanInput(sourceContents, sourceLen, sourceContents, &sourceLen);
+    }
+    else {
+        ed.filename.buff = DefaultFilename;
+        ed.filename.size = (size_t) strlen(DefaultFilename);
+        for (size_t num = 1;
+            DoesFileExist(ed.filename.buff);
+            ++num)
+        {
+            int n;
+            sprintf(fnBuff, "%s (%zu)%n", DefaultFilename, num, &n);
+            ed.filename.buff = fnBuff;
+            ed.filename.size = (size_t) n;
+        }
+        
+        sourceContents = "";
+        sourceLen = 0;
+    }
+
     InitializeEditor();
 
     SDL_Cursor* const mouseCursorArrow = SDL_CHECK_PTR(
@@ -837,6 +859,12 @@ int main(int argc, char** argv) {
     SDL_Cursor const* currentMouseCursor = mouseCursorArrow;
     
     ed.textBuff = TextBufferNew(8);
+    if (sourceLen > 0) {
+        InsertText(&ed.textBuff, &ed.cursor, sourceContents, sourceLen);
+        free(sourceContents);
+    }
+    ed.cursor.curPos.col = 0;
+    ed.cursor.curPos.ln = 0;
     ed.isUpdated = false;
 
     Uint32 const timestep = 1000 / TargetFPS;
@@ -847,8 +875,13 @@ int main(int argc, char** argv) {
         Uint32 startTick = SDL_GetTicks();
         if (startTick > lastSecond + 1000) {
             char t[1024];
-            strcpy(t, ProgramTitle);
-            sprintf(t+strlen(ProgramTitle), " (FPS=%d, Updates=%d)", frameCount, updateCount);
+            snprintf(t, 1024,
+                "%s - %.*s (FPS=%d, Updates=%d)",
+                // "%s - %.*s:%zu:%zu (FPS=%d, Updates=%d)",
+                ProgramTitle,
+                (int)ed.filename.size, ed.filename.buff,
+                // ed.cursor.curPos.ln, ed.cursor.curPos.col,
+                frameCount, updateCount);
             SDL_SetWindowTitle(ed.window.handle, t);
             frameCount = 0;
             updateCount = 0;
@@ -864,7 +897,7 @@ int main(int argc, char** argv) {
 
             case SDL_WINDOWEVENT: { // https://wiki.libsdl.org/SDL_WindowEvent
                 // This case is handled by the event watch, because otherwise the resize blocks
-                if (e.window.event == SDL_WINDOWEVENT_RESIZED || e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                if (e.window.event == SDL_WINDOWEVENT_RESIZED || e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || e.window.event == SDL_WINDOWEVENT_EXPOSED) {
                     Resize();
                 }
             } break;

@@ -8,6 +8,25 @@
 #include <errno.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <io.h>
+#define F_OK 0
+#define access _access
+#else
+#include <unistd.h>
+#endif
+
+bool DoesFileExist(const char* filename) {
+    return access(filename, F_OK) == 0;
+}
+
+bool CreateFileIfNotExist(const char* filename) {
+    FILE* fp = fopen(filename, "w");
+    if (fp == NULL)
+        return false;
+    return fclose(fp) == 0;
+}
+
 // CALLS MALLOC, USER NEEDS TO FREE
 char* AbsoluteFilePath(const char* filename) {
     // absolute path of filename relative to binary
@@ -19,9 +38,9 @@ char* AbsoluteFilePath(const char* filename) {
     return filePath;
 }
 
-char* ReadFileOrCrash(const char* filename, size_t* outSize) {
+char* OpenAndReadFileOrCrash(FilePath path, const char* filename, size_t* outSize) {
     char* outBuff;
-    int res = ReadFileContents(filename, outSize, &outBuff);
+    int res = OpenAndReadFile(path, filename, outSize, &outBuff);
     if (res != 0) {
         switch (res) {
             break; case -2: fprintf(stderr, "ERROR: Malloc failed\n");
@@ -36,21 +55,33 @@ char* ReadFileOrCrash(const char* filename, size_t* outSize) {
     return outBuff;
 }
 
+
+int OpenAndReadFile(FilePath path, const char* filename, size_t* outSize, char** outBuff) {
+    FILE* fp;
+    if (path == FilePathRelativeToBin) {
+        char* filePath = AbsoluteFilePath(filename);
+        fp = fopen(filePath, "rb");
+        free(filePath);
+    }
+    else {
+        fp = fopen(filename, "rb");
+    }
+
+    int err = ReadFile(fp, outSize, outBuff);
+    if (fp) fclose(fp);
+    return err;
+}
+
 // -2 malloc failed
 // -1 malloc too big
 // 0 success
 // 1 file error (errno)
 // 2 feof
 // 3 ferror
-int ReadFileContents(const char* filename, size_t* outSize, char** outBuff) {
+int ReadFile(FILE* fp, size_t* outSize, char** outBuff) {
     assert(outBuff != NULL);
 
-    // absolute path (relative to binary)
-    char* filePath = AbsoluteFilePath(filename);
-
     // open file
-    FILE* fp = fopen(filePath, "rb");
-    free(filePath);
     if (fp == NULL) {
         return 1;
     }
@@ -90,12 +121,49 @@ int ReadFileContents(const char* filename, size_t* outSize, char** outBuff) {
         }
         return 4; // this is probably unreachable
     }
-    fclose(fp);
     buff[size] = 0;
 
     // caller is responsible for freeing this
     *outBuff = buff;
     return 0;
 }
+
+
+void OpenAndWriteFileOrCrash(FilePath path, const char* filename, const char* buff, size_t size) {
+    int res = OpenAndWriteFile(path, filename, buff, size);
+    if (res != 0) {
+        fprintf(stderr, "ERROR: Couldn't write to file '%s': %s\n", filename, strerror(errno));
+        exit(1);
+    }
+}
+
+int OpenAndWriteFile(FilePath path, const char* filename, const char* buff, size_t size) {
+    FILE* fp;
+    if (path == FilePathRelativeToBin) {
+        char* filePath = AbsoluteFilePath(filename);
+        fp = fopen(filePath, "wb");
+        free(filePath);
+    }
+    else {
+        fp = fopen(filename, "wb");
+    }
+
+    int err = WriteFile(fp, buff, size);
+    if (fp) fclose(fp);
+    return err;
+}
+
+int WriteFile(FILE* fp, const char* buff, size_t size) {
+    if (fp == NULL) {
+        return 1;
+    }
+
+    size_t numBytes = fwrite(buff, 1, size, fp);
+    if (numBytes != size) {
+        return 1;
+    }
+    return 0;
+}
+
 
 

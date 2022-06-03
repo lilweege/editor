@@ -3,6 +3,7 @@
 const int InitialWindowWidth = 800;
 const int InitialWindowHeight = 600;
 const char* ProgramTitle = "Editor";
+const char* DefaultFilename = "unnamed";
 const char* FontFilename = "../assets/FSEX300.png";
 const char* VertexShaderFilename = "../shaders/font.vert";
 const char* FragmentShaderFilename = "../shaders/font.frag";
