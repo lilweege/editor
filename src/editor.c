@@ -90,6 +90,10 @@ static void CleanInput(const char* inBuff, size_t inSize, char* outBuff, size_t*
         if ((ASCII_PRINTABLE_MIN <= c && c <= ASCII_PRINTABLE_MAX) || (c == '\n')) {
             outBuff[size++] = c;
         }
+        else if (c == '\t') {
+            // replacing tab with spaces will overflow the buffer
+
+        }
     }
 
     if (outSize != NULL) {
@@ -818,7 +822,8 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    char fnBuff[sizeof(DefaultFilename) + 25];
+    char fnBuff[64];
+    assert(strlen(DefaultFilename) + 25 < 64);
     char* sourceContents;
     size_t sourceLen;
 
