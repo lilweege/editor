@@ -1,5 +1,4 @@
-CC = clang
-CXX = clang++
+CXX = g++
 BIN = bin
 OBJ = obj
 SRC = src
@@ -17,7 +16,7 @@ PKG_LIBS = $(shell pkg-config --libs $(PKGS))
 
 INCLUDES = -I./include/immer
 
-CC_COMMON = -march=native -Wall -Wextra -Wno-unused-parameter $(PKG_FLAGS) $(INCLUDES)
+CC_COMMON = -march=native -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers $(PKG_FLAGS) $(INCLUDES)
 CC_DEBUG = -g -fsanitize=undefined,address
 CC_RELEASE = -DNDEBUG -O3 -Werror
 LD_COMMON = $(PKG_LIBS) -lm
@@ -35,10 +34,9 @@ release: clean $(TARGET)
 $(OBJ)/%.cpp.o: $(SRC)/%.cpp
 	$(CXX) -std=c++20 -MMD $(CFLAGS) -c $< -o $@
 $(OBJ)/%.c.o: $(SRC)/%.c
-	$(CC) -std=c11 -MMD $(CFLAGS) -c $< -o $@
+	$(CXX) -std=c++20 -MMD $(CFLAGS) -c $< -o $@
 $(LANG_PATH)/obj/%.c.o: $(LANG_PATH)/src/%.c
-	$(CC) -std=c11 -MMD $(CFLAGS) -c $< -o $@
-
+	$(CXX) -std=c++20 -MMD $(CFLAGS) -c $< -o $@
 
 $(TARGET): $(OBJS)
 	$(CXX) -std=c++20 $(CXXFLAGS) $(OBJS) -o $@ $(LDFLAGS)

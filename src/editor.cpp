@@ -1,6 +1,4 @@
-extern "C" {
 #include "trash-lang/src/tokenizer.h"
-}
 
 #include "cursor.h"
 #include "textbuffer.h"
@@ -237,7 +235,7 @@ static void UpdateBuffer() {
     size_t cx = ed.cursor.curPos.col-ed.window.firstColumn+lineNumWidth+1;
     size_t cy = ed.cursor.curPos.ln-ed.window.firstLine;
     if (lineNumWidth+1 <= cx && cx <= ed.window.numCols &&
-        0 <= cy && cy <= ed.window.numRows)
+        cy <= ed.window.numRows)
     {
         idx = cy * (ed.window.numCols+1) + cx;
         if (hasSelection(&ed.cursor)) {
@@ -258,7 +256,7 @@ static void UpdateBuffer() {
     size_t sy = ed.cursor.curSel.ln-ed.window.firstLine;
 
     if (lineNumWidth+1 <= sx && sx <= ed.window.numCols &&
-        0 <= sy && sy <= ed.window.numRows &&
+        sy <= ed.window.numRows &&
         hasSelection(&ed.cursor))
     {
         idx = sy * (ed.window.numCols+1) + sx;
@@ -714,8 +712,8 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
         char* text;
         size_t textSize;
         ExtractText(tb,
-                { 0, 0 },
-                { tb->numLines-1, tb->lines[tb->numLines-1]->numCols },
+                (CursorPos) { 0, 0 },
+                (CursorPos) { tb->numLines-1, tb->lines[tb->numLines-1]->numCols },
                 &text, &textSize);
         if (!DoesFileExist(ed.filename.buff)) {
             assert(CreateFileIfNotExist(ed.filename.buff));
@@ -827,8 +825,8 @@ int main(int argc, char** argv) {
 
     char fnBuff[64];
     assert(strlen(DefaultFilename) + 25 < 64);
-    char* sourceContents;
-    size_t sourceLen;
+    char* sourceContents = NULL;
+    size_t sourceLen = 0;
 
     if (argc == 2) {
         ed.filename.buff = argv[1];
