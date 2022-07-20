@@ -26,7 +26,7 @@ bool hasSelection(Cursor const* cursor) {
             cursor->selBegin.ln != cursor->selEnd.ln;
 }
 
-static bool isWhitespace(char c) { return c <= ' ' || c > '~'; }
+// static bool isWhitespace(char c) { return c <= ' ' || c > '~'; }
 static bool isText(char c) { return isalnum(c); }
 
 CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur) {
@@ -155,7 +155,7 @@ void ExtractText(TextBuffer* tb, CursorPos selBegin, CursorPos selEnd, char** ou
         n += tb->lines[ln]->numCols+1;
     }
     n -= selBegin.col;
-    char* buff = malloc(n+1);
+    char* buff = (char*) malloc(n+1);
     if (buff == NULL) {
         PANIC_HERE("MALLOC", "Could not allocate text buffer");
     }
@@ -188,13 +188,13 @@ void ExtractText(TextBuffer* tb, CursorPos selBegin, CursorPos selEnd, char** ou
 void InsertText(TextBuffer* tb, Cursor* cursor, const char* s, size_t n) {
     // assumes s is 'clean'
     size_t maxLines = 1024;
-    size_t* lineIdx = malloc(maxLines*sizeof(size_t));
+    size_t* lineIdx = (size_t*) malloc(maxLines*sizeof(size_t));
     size_t nLines = 0;
     for (size_t i = 0; i < n; ++i) {
         if (s[i] == '\n') {
             // FIXME: lazy dynamic array, no error checking
             if (nLines > maxLines/2)
-                lineIdx = realloc(lineIdx, (maxLines <<= 1)*sizeof(size_t));
+                lineIdx = (size_t*) realloc(lineIdx, (maxLines <<= 1)*sizeof(size_t));
             lineIdx[nLines++] = i;
         }
     }

@@ -1,4 +1,7 @@
+extern "C" {
 #include "trash-lang/src/tokenizer.h"
+}
+
 #include "cursor.h"
 #include "textbuffer.h"
 #include "error.h"
@@ -167,8 +170,8 @@ static void UpdateBuffer() {
     {
         Tokenizer line = {
             .source = {
-                .data = ed.textBuff.lines[y]->buff,
                 .size = ed.textBuff.lines[y]->numCols,
+                .data = ed.textBuff.lines[y]->buff,
             }
         };
         
@@ -362,7 +365,7 @@ static void InitializeEditor() {
     ed.window.height = InitialWindowHeight;
     ed.window.scale = InitialFontScale;
 
-    ed.window.handle = SDL_CHECK_PTR(
+    ed.window.handle = (SDL_Window*) SDL_CHECK_PTR(
         SDL_CreateWindow(ProgramTitle,
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
             ed.window.width, ed.window.height,
@@ -404,7 +407,7 @@ static void InitializeEditor() {
     glUseProgram(ed.gl.program);
 
     char* fontTexturePath = AbsoluteFilePath(FontFilename);
-    ed.fontSrc.data = STBI_CHECK_PTR(
+    ed.fontSrc.data = (uint8_t*) STBI_CHECK_PTR(
         stbi_load(fontTexturePath, &ed.fontSrc.width, &ed.fontSrc.height, &ed.fontSrc.comps, STBI_rgb_alpha));
     free(fontTexturePath);
 
@@ -432,7 +435,7 @@ static void InitializeEditor() {
     GLint const fontCharHeight = ed.fontSrc.height;
     int maxHeight = 3440, maxWidth = 1440; // reasonable maximum
     ed.cells.cap = (maxHeight+1)*(maxWidth/2+1);
-    ed.cells.buff = malloc(ed.cells.cap*sizeof(Cell)); // TODO: free
+    ed.cells.buff = (Cell*) malloc(ed.cells.cap*sizeof(Cell)); // TODO: free
     glUniform2i(ed.gl.uCellSize, fontCharWidth, fontCharHeight);
     UpdateDimensions();
     glUniform1f(ed.gl.uFontScale, ed.window.scale);
@@ -469,7 +472,7 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
     // keys: backspace, delete, enter, home, end, pgup, pgdown, left/right, up/down, tab
     // mods: ctrl, shift, alt
     SDL_Keycode code = event->keysym.sym;
-    SDL_Keymod mod = event->keysym.mod;
+    SDL_Keymod mod = (SDL_Keymod) event->keysym.mod;
     bool const ctrlPressed = mod & KMOD_CTRL,
         shiftPressed = mod & KMOD_SHIFT;
     // TODO: slight optimizations, when splitting the current line, choose smaller half to reinsert
@@ -711,8 +714,8 @@ static void HandleKeyDown(TextBuffer* tb, Cursor* cursor, SDL_KeyboardEvent cons
         char* text;
         size_t textSize;
         ExtractText(tb,
-                (CursorPos) { 0, 0 },
-                (CursorPos) { tb->numLines-1, tb->lines[tb->numLines-1]->numCols },
+                { 0, 0 },
+                { tb->numLines-1, tb->lines[tb->numLines-1]->numCols },
                 &text, &textSize);
         if (!DoesFileExist(ed.filename.buff)) {
             assert(CreateFileIfNotExist(ed.filename.buff));
@@ -851,15 +854,14 @@ int main(int argc, char** argv) {
             ed.filename.size = (size_t) n;
         }
         
-        sourceContents = "";
         sourceLen = 0;
     }
 
     InitializeEditor();
 
-    SDL_Cursor* const mouseCursorArrow = SDL_CHECK_PTR(
+    SDL_Cursor* const mouseCursorArrow = (SDL_Cursor*) SDL_CHECK_PTR(
         SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW));
-    SDL_Cursor* const mouseCursorIBeam = SDL_CHECK_PTR(
+    SDL_Cursor* const mouseCursorIBeam = (SDL_Cursor*) SDL_CHECK_PTR(
         SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM));
     SDL_Cursor const* currentMouseCursor = mouseCursorArrow;
     

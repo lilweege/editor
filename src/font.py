@@ -41,14 +41,29 @@ for idx, char in enumerate(chars):
 	draw.text((idx*max_width+0.5*max_width, 0), char, font=font, anchor="ma")
 
 # remove extra space
-*_, height = im.getbbox()
+*_, height = im.getbbox() # NOLINT
 im = im.crop((0, 0, im.width, height))
 
 
 basename = os.path.basename(filename)[:-4]
 im.save(f"{basename}.png")
 
-# # write to stdout in c-style
+skip = len(im.getbands())
+for ch in range(len(chars)):
+	for y in range(im.height):
+		for x in range(max_width//8):
+			w = 0
+			for a in range(8):
+				b = im.getpixel((max_width*ch+x*8+a, y))
+				if b[0]:
+					w |= 1 << (7-a)
+			print(f"0b{w:0{8}b}", end=",\n")
+	print()
+
+# print(im.tobytes())
+# for b in im.tobytes()[::skip]:
+
+# write to stdout in c-style
 # print(f"const int {basename}CharWidth = {max_width};")
 # print(f"const int {basename}CharHeight = {im.height};")
 # print(f"const int {basename}BitmapWidth = {im.width};")

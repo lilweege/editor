@@ -7,7 +7,7 @@
 LineBuffer* LineBufferNew(size_t initCols) {
     if (initCols < LB_MIN)
         initCols = LB_MIN;
-    LineBuffer* lb = malloc(sizeof(LineBuffer) + initCols);
+    LineBuffer* lb = (LineBuffer*) malloc(sizeof(LineBuffer) + initCols);
     if (lb == NULL)
         return NULL;
     lb->numCols = 0;
@@ -22,7 +22,7 @@ void LineBufferFree(LineBuffer* lb) {
 static bool LineBufferRealloc(LineBuffer** lbP, size_t newMax) {
     if (newMax < LB_MIN)
         newMax = LB_MIN;
-    LineBuffer* lb = realloc(*lbP, sizeof(LineBuffer) + newMax);
+    LineBuffer* lb = (LineBuffer*) realloc(*lbP, sizeof(LineBuffer) + newMax);
     if (lb == NULL)
         return false;
     (*lbP = lb)->maxCols = newMax;
@@ -66,9 +66,9 @@ void LineBufferErase(LineBuffer** lbP, size_t n, size_t idx) {
 
 TextBuffer TextBufferNew(size_t initLines) {
     TextBuffer tb = {
-        .lines = malloc(initLines * sizeof(LineBuffer*)),
         .numLines = 1,
         .maxLines = initLines,
+        .lines = (LineBuffer**) malloc(initLines * sizeof(LineBuffer*)),
     };
     if (tb.lines == NULL)
         PANIC_HERE("MALLOC", "Could not allocate TextBuffer");
@@ -85,7 +85,7 @@ void TextBufferFree(TextBuffer tb) {
 static bool TextBufferRealloc(TextBuffer* tbP, size_t newMax) {
     if (newMax < TB_MIN)
         newMax = TB_MIN;
-    LineBuffer** newLines = realloc(tbP->lines, newMax * sizeof(LineBuffer*));
+    LineBuffer** newLines = (LineBuffer**) realloc(tbP->lines, newMax * sizeof(LineBuffer*));
     if (newLines == NULL)
         return false;
     tbP->lines = newLines;
