@@ -17,37 +17,37 @@ bool isBetween(size_t ln, size_t col, CursorPos p, CursorPos q) {
     return lexLe(p.ln, p.col, ln, col) && lexLe(ln, col, q.ln, q.col);
 }
 
-bool isSelecting(Cursor const* cursor) {
-    return cursor->mouseSelecting || cursor->shiftSelecting;
+bool isSelecting(Cursor const& cursor) {
+    return cursor.mouseSelecting || cursor.shiftSelecting;
 }
 
-bool hasSelection(Cursor const* cursor) {
-    return cursor->selBegin.col != cursor->selEnd.col ||
-            cursor->selBegin.ln != cursor->selEnd.ln;
+bool hasSelection(Cursor const& cursor) {
+    return cursor.selBegin.col != cursor.selEnd.col ||
+            cursor.selBegin.ln != cursor.selEnd.ln;
 }
 
 // static bool isWhitespace(char c) { return c <= ' ' || c > '~'; }
 static bool isText(char c) { return isalnum(c); }
 
-CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur) {
+CursorPos TextBuffNextBlockPos(Text const& text, CursorPos cur) {
     // assumes cur is a valid pos
     // wrap if at end of line
-    if (cur.col == tb->lines[cur.ln]->numCols) {
+    if (cur.col == text[cur.ln].size()) {
         // return if past end of buff
-        if (cur.ln+1 >= tb->numLines) {
-            return (CursorPos) { .ln=tb->numLines-1, .col=tb->lines[tb->numLines-1]->numCols };
+        if (cur.ln+1 >= text.size()) {
+            return (CursorPos) { .ln=text.size()-1, .col=text[text.size()-1].size() };
         }
         cur.ln += 1;
         cur.col = 0;
     }
-    
+
     // this block logic is way simpler than others, mostly because handling all that is pain
     bool seenText = false;
-    for (size_t n = tb->lines[cur.ln]->numCols;
+    for (size_t n = text[cur.ln].size();
         cur.col < n;
         ++cur.col)
     {
-        char c = tb->lines[cur.ln]->buff[cur.col];
+        char c = text[cur.ln][cur.col];
         if (isText(c)) {
             seenText = true;
         }
@@ -55,11 +55,11 @@ CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur) {
             break;
         }
     }
-    
+
     return cur;
 }
 
-CursorPos TextBuffPrevBlockPos(TextBuffer const* tb, CursorPos cur) {
+CursorPos TextBuffPrevBlockPos(Text const& text, CursorPos cur) {
     // assumes cur is a valid pos
     // wrap if at end of line
     if (cur.col == 0) {
@@ -68,16 +68,16 @@ CursorPos TextBuffPrevBlockPos(TextBuffer const* tb, CursorPos cur) {
             return (CursorPos) { .ln=0, .col=0 };
         }
         cur.ln -= 1;
-        cur.col = tb->lines[cur.ln]->numCols;
+        cur.col = text[cur.ln].size();
     }
-    
+
     bool seenText = false;
     --cur.col;
-    for (size_t n = tb->lines[cur.ln]->numCols;
+    for (size_t n = text[cur.ln].size();
         cur.col < n;
         --cur.col)
     {
-        char c = tb->lines[cur.ln]->buff[cur.col];
+        char c = text[cur.ln][cur.col];
         if (isText(c)) {
             seenText = true;
         }
@@ -91,68 +91,63 @@ CursorPos TextBuffPrevBlockPos(TextBuffer const* tb, CursorPos cur) {
 
 
 
-void UpdateSelection(Cursor* cursor) {
+void UpdateSelection(Cursor& cursor) {
     // set selBegin and selEnd, determined by curPos and curSel
-    if (lexLe(cursor->curPos.ln, cursor->curPos.col, cursor->curSel.ln, cursor->curSel.col)) {
-        cursor->selBegin.col = cursor->curPos.col;
-        cursor->selBegin.ln = cursor->curPos.ln;
-        cursor->selEnd.col = cursor->curSel.col;
-        cursor->selEnd.ln = cursor->curSel.ln;
+    if (lexLe(cursor.curPos.ln, cursor.curPos.col, cursor.curSel.ln, cursor.curSel.col)) {
+        cursor.selBegin.col = cursor.curPos.col;
+        cursor.selBegin.ln = cursor.curPos.ln;
+        cursor.selEnd.col = cursor.curSel.col;
+        cursor.selEnd.ln = cursor.curSel.ln;
     }
     else {
-        cursor->selBegin.col = cursor->curSel.col;
-        cursor->selBegin.ln = cursor->curSel.ln;
-        cursor->selEnd.col = cursor->curPos.col;
-        cursor->selEnd.ln = cursor->curPos.ln;
+        cursor.selBegin.col = cursor.curSel.col;
+        cursor.selBegin.ln = cursor.curSel.ln;
+        cursor.selEnd.col = cursor.curPos.col;
+        cursor.selEnd.ln = cursor.curPos.ln;
     }
 }
 
-void StopSelecting(Cursor* cursor) {
-    cursor->mouseSelecting = false;
-    cursor->shiftSelecting = false;
-    cursor->curSel.col = cursor->curPos.col;
-    cursor->curSel.ln = cursor->curPos.ln;
-    cursor->selBegin.col = cursor->curPos.col;
-    cursor->selBegin.ln = cursor->curPos.ln;
-    cursor->selEnd.col = cursor->curPos.col;
-    cursor->selEnd.ln = cursor->curPos.ln;
+void StopSelecting(Cursor& cursor) {
+    cursor.mouseSelecting = false;
+    cursor.shiftSelecting = false;
+    cursor.curSel.col = cursor.curPos.col;
+    cursor.curSel.ln = cursor.curPos.ln;
+    cursor.selBegin.col = cursor.curPos.col;
+    cursor.selBegin.ln = cursor.curPos.ln;
+    cursor.selEnd.col = cursor.curPos.col;
+    cursor.selEnd.ln = cursor.curPos.ln;
 }
 
-void EraseBetween(TextBuffer* tb, Cursor* cursor, CursorPos begin, CursorPos end) {
+void EraseBetween(Text& text, Cursor& cursor, CursorPos begin, CursorPos end) {
     if (begin.ln == end.ln) {
-        LineBufferErase(tb->lines+begin.ln, end.col - begin.col, begin.col);
+        text[begin.ln].erase(text[begin.ln].begin()+begin.col, text[begin.ln].begin()+end.col);
     }
     else {
         assert(end.ln > begin.ln);
-        LineBufferErase(tb->lines+begin.ln,
-            tb->lines[begin.ln]->numCols - begin.col,
-            begin.col);
-        LineBufferInsertStr(tb->lines+begin.ln,
-            tb->lines[end.ln]->buff + end.col,
-            tb->lines[end.ln]->numCols - end.col,
-            tb->lines[begin.ln]->numCols);
-        TextBufferErase(tb, end.ln-begin.ln, begin.ln+1);
+        text[begin.ln].erase(text[begin.ln].begin()+begin.col, text[begin.ln].end());
+        text[begin.ln].insert(text[begin.ln].end(), text[end.ln].begin()+end.col, text[end.ln].end());
+        text.erase(text.begin()+begin.ln+1, text.begin()+end.ln+1);
     }
 
-    cursor->curPos.ln = begin.ln;
-    size_t cols = tb->lines[cursor->curPos.ln]->numCols;
-    cursor->curPos.col = begin.col;
-    if (cursor->curPos.col > cols)
-        cursor->curPos.col = cols;
+    cursor.curPos.ln = begin.ln;
+    size_t cols = text[cursor.curPos.ln].size();
+    cursor.curPos.col = begin.col;
+    if (cursor.curPos.col > cols)
+        cursor.curPos.col = cols;
     StopSelecting(cursor);
 }
 
-void EraseSelection(TextBuffer* tb, Cursor* cursor) {
-    EraseBetween(tb, cursor, cursor->selBegin, cursor->selEnd);
+void EraseSelection(Text& text, Cursor& cursor) {
+    EraseBetween(text, cursor, cursor.selBegin, cursor.selEnd);
 }
 
-void ExtractText(TextBuffer* tb, CursorPos selBegin, CursorPos selEnd, char** outBuff, size_t* outSize) {
+void ExtractText(Text& text, CursorPos selBegin, CursorPos selEnd, char** outBuff, size_t* outSize) {
     size_t n = selEnd.col;
     for (size_t ln = selBegin.ln;
         ln < selEnd.ln;
         ++ln)
     {
-        n += tb->lines[ln]->numCols+1;
+        n += text[ln].size()+1;
     }
     n -= selBegin.col;
     char* buff = (char*) malloc(n+1);
@@ -160,23 +155,31 @@ void ExtractText(TextBuffer* tb, CursorPos selBegin, CursorPos selEnd, char** ou
         PANIC_HERE("MALLOC", "Could not allocate text buffer");
     }
     if (selBegin.ln == selEnd.ln) {
-        memcpy(buff,
-            tb->lines[selBegin.ln]->buff + selBegin.col,
-            selEnd.col - selBegin.col);
+        if (text[selBegin.ln].data() != NULL) {
+            memcpy(buff,
+                text[selBegin.ln].data() + selBegin.col,
+                selEnd.col - selBegin.col);
+        }
     }
     else {
-        size_t i = tb->lines[selBegin.ln]->numCols - selBegin.col;
-        memcpy(buff, tb->lines[selBegin.ln]->buff + selBegin.col, i);
+        size_t i = text[selBegin.ln].size() - selBegin.col;
+        if (text[selBegin.ln].data() != NULL) {
+            memcpy(buff, text[selBegin.ln].data() + selBegin.col, i);
+        }
         buff[i++] = '\n';
         for (size_t ln = selBegin.ln+1;
             ln < selEnd.ln; ++ln)
         {
-            size_t sz = tb->lines[ln]->numCols;
-            memcpy(buff+i, tb->lines[ln]->buff, sz);
+            size_t sz = text[ln].size();
+            if (text[ln].data() != NULL) {
+                memcpy(buff+i, text[ln].data(), sz);
+            }
             i += sz;
             buff[i++] = '\n';
         }
-        memcpy(buff+i, tb->lines[selEnd.ln]->buff, selEnd.col);
+        if (text[selEnd.ln].data() != NULL) {
+            memcpy(buff+i, text[selEnd.ln].data(), selEnd.col);
+        }
     }
     buff[n] = 0;
     *outBuff = buff;
@@ -185,40 +188,38 @@ void ExtractText(TextBuffer* tb, CursorPos selBegin, CursorPos selEnd, char** ou
     }
 }
 
-void InsertText(TextBuffer* tb, Cursor* cursor, const char* s, size_t n) {
+void InsertText(Text& text, Cursor& cursor, const char* s, size_t n) {
     // assumes s is 'clean'
-    size_t maxLines = 1024;
-    size_t* lineIdx = (size_t*) malloc(maxLines*sizeof(size_t));
-    size_t nLines = 0;
+    std::vector<size_t> lineIdx;
     for (size_t i = 0; i < n; ++i) {
         if (s[i] == '\n') {
             // FIXME: lazy dynamic array, no error checking
-            if (nLines > maxLines/2)
-                lineIdx = (size_t*) realloc(lineIdx, (maxLines <<= 1)*sizeof(size_t));
-            lineIdx[nLines++] = i;
+            lineIdx.push_back(i);
         }
     }
-    lineIdx[nLines] = n;
+    size_t nLines = lineIdx.size();
+    lineIdx.push_back(n);
 
-    TextBufferInsert(tb, nLines, cursor->curPos.ln+1);
     if (nLines > 0) {
         // split line
-        LineBufferInsertStr(tb->lines + cursor->curPos.ln + nLines,
-            tb->lines[cursor->curPos.ln]->buff + cursor->curPos.col,
-            tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
-            0);
-        LineBufferErase(tb->lines + cursor->curPos.ln,
-            tb->lines[cursor->curPos.ln]->numCols - cursor->curPos.col,
-            cursor->curPos.col);
+        text.insert(text.begin()+cursor.curPos.ln+1, nLines, std::vector<char>{});
+        text[cursor.curPos.ln+nLines].insert(text[cursor.curPos.ln+nLines].begin(),
+            text[cursor.curPos.ln].begin()+cursor.curPos.col,
+            text[cursor.curPos.ln].end());
+        text[cursor.curPos.ln].erase(
+            text[cursor.curPos.ln].begin()+cursor.curPos.col,
+            text[cursor.curPos.ln].end());
     }
-    LineBufferInsertStr(tb->lines+(cursor->curPos.ln),
-        s, lineIdx[0], cursor->curPos.col);
-    cursor->curPos.col += lineIdx[0];
+    text[cursor.curPos.ln].insert(
+        text[cursor.curPos.ln].begin()+cursor.curPos.col,
+        s, s+lineIdx[0]);
+    cursor.curPos.col += lineIdx[0];
     for (size_t i = 0; i < nLines; ++i) {
         size_t sz = lineIdx[i+1]-lineIdx[i]-1;
-        LineBufferInsertStr(tb->lines+(++cursor->curPos.ln),
-            s+lineIdx[i]+1, sz, 0);
-        cursor->curPos.col = sz;
+        ++cursor.curPos.ln;
+        text[cursor.curPos.ln].insert(
+            text[cursor.curPos.ln].begin(),
+            s+lineIdx[i]+1, s+lineIdx[i]+1+sz);
+        cursor.curPos.col = sz;
     }
-    free(lineIdx);
 }

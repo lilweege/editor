@@ -21,16 +21,16 @@ typedef struct {
 
 
 bool isBetween(size_t ln, size_t col, CursorPos p, CursorPos q);
-bool isSelecting(Cursor const* cursor);
-bool hasSelection(Cursor const* cursor);
-CursorPos TextBuffNextBlockPos(TextBuffer const* tb, CursorPos cur);
-CursorPos TextBuffPrevBlockPos(TextBuffer const* tb, CursorPos cur);
-void UpdateSelection(Cursor* cursor);
-void StopSelecting(Cursor* cursor);
-void EraseBetween(TextBuffer* tb, Cursor* cursor, CursorPos begin, CursorPos end);
-void EraseSelection(TextBuffer* tb, Cursor* cursor);
+bool isSelecting(Cursor const& cursor);
+bool hasSelection(Cursor const& cursor);
+CursorPos TextBuffNextBlockPos(Text const& text, CursorPos cur);
+CursorPos TextBuffPrevBlockPos(Text const& text, CursorPos cur);
+void UpdateSelection(Cursor& cursor);
+void StopSelecting(Cursor& cursor);
+void EraseBetween(Text& text, Cursor& cursor, CursorPos begin, CursorPos end);
+void EraseSelection(Text& text, Cursor& cursor);
 
-void ExtractText(TextBuffer* tb, CursorPos selBegin, CursorPos selEnd, char** outBuff, size_t* outSize);
-void InsertText(TextBuffer* tb, Cursor* cursor, const char* s, size_t n);
+void ExtractText(Text& text, CursorPos selBegin, CursorPos selEnd, char** outBuff, size_t* outSize);
+void InsertText(Text& text, Cursor& cursor, const char* s, size_t n);
 
 #endif // CURSOR_H_
