@@ -1,5 +1,3 @@
-#include "trash-lang/src/tokenizer.h"
-
 #include "buffer.hpp"
 #include "error.hpp"
 #include "config.hpp"
@@ -7,6 +5,9 @@
 #include "gl.hpp"
 #include "file.hpp"
 
+#if SYNTAX_HIGHLIGHT
+#include "trash-lang/src/tokenizer.h"
+#endif
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h" // TODO: don't depend on this
@@ -159,7 +160,7 @@ static void UpdateBuffer() {
     }
 
 
-#if 0
+#if SYNTAX_HIGHLIGHT
     for (y = ed.window.firstLine;
         y <= ed.window.firstLine+ed.window.numRows && y < ed.buffer.text.size();
         ++y)
