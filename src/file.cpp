@@ -1,4 +1,4 @@
-#include "file.h"
+#include "file.hpp"
 
 #include "whereami.h"
 
@@ -31,7 +31,7 @@ bool CreateFileIfNotExist(const char* filename) {
 char* AbsoluteFilePath(const char* filename) {
     // absolute path of filename relative to binary
     int pathSz = wai_getExecutablePath(NULL, 0, NULL);
-    char* filePath = malloc(pathSz + 1 + strlen(filename));
+    char* filePath = (char*) malloc(pathSz + 1 + strlen(filename));
     int dirnameSz;
     wai_getExecutablePath(filePath, pathSz, &dirnameSz);
     strcpy(filePath+dirnameSz+1, filename);

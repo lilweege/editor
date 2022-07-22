@@ -1,4 +1,4 @@
-#include "config.h"
+#include "config.hpp"
 
 const int InitialWindowWidth = 800;
 const int InitialWindowHeight = 600;

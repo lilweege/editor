@@ -1,5 +1,5 @@
-#include "gl.h"
-#include "file.h"
+#include "gl.hpp"
+#include "file.hpp"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +26,7 @@ static bool CompileShaderSource(const GLchar *source, GLenum shaderType, GLuint 
     GLint maxSz;
     glGetShaderiv(*shader, GL_INFO_LOG_LENGTH, &maxSz);
     GLsizei infoSz;
-    GLchar* info = malloc(maxSz*sizeof(GLchar));
+    GLchar* info = (GLchar*) malloc(maxSz*sizeof(GLchar));
     glGetShaderInfoLog(*shader, maxSz, &infoSz, info);
     if (compiled == GL_FALSE) {
         fprintf(stderr, "GL ERROR: Could not compile shader '%s'\n",
@@ -59,7 +59,7 @@ bool LinkProgram(GLuint vertShader, GLuint fragShader, GLuint* program) {
     GLint maxSz;
     glGetProgramiv(*program, GL_INFO_LOG_LENGTH, &maxSz);
     GLsizei infoSz;
-    GLchar* info = malloc(maxSz*sizeof(GLchar));
+    GLchar* info = (GLchar*) malloc(maxSz*sizeof(GLchar));
     glGetProgramInfoLog(*program, maxSz, &infoSz, info);
     if (infoSz > 0) {
         if (linked == GL_FALSE)

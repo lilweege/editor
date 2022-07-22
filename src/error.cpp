@@ -1,4 +1,4 @@
-#include "error.h"
+#include "error.hpp"
 #include "stb_image.h"
 #include <SDL2/SDL_error.h>
 

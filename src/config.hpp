@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define SYNTAX_HIGHLIGHT 0
+
 #define ASCII_PRINTABLE_MIN (' ')
 #define ASCII_PRINTABLE_MAX ('~')
 #define ASCII_PRINTABLE_CNT (ASCII_PRINTABLE_MAX - ASCII_PRINTABLE_MIN + 1)
