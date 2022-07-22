@@ -70,6 +70,8 @@ struct Editor {
     CellBuffer cells;
     Filename filename;
 
+    std::vector<Buffer> undoHistory;
+    size_t undoIndex;
     Buffer buffer;
 
     bool isValid;
@@ -451,6 +453,13 @@ static void DestroyEditor() {
     // TODO
 }
 
+static void PushBufferState() {
+    if (ed.undoIndex+1 < ed.undoHistory.size())
+        ed.undoHistory.erase(ed.undoHistory.begin()+ed.undoIndex+1, ed.undoHistory.end());
+    ed.undoHistory.push_back(ed.buffer);
+    ed.undoIndex = ed.undoHistory.size()-1;
+}
+
 static void HandleTextInput(SDL_TextInputEvent const& event) {
     if (hasSelection(ed.buffer.cursor)) {
         EraseSelection(ed.buffer.text, ed.buffer.cursor);
@@ -462,10 +471,12 @@ static void HandleTextInput(SDL_TextInputEvent const& event) {
     assert(n == 1); // I'm unsure about this, SDL api is unclear
     InsertCStr(ed.buffer.text, ed.buffer.cursor.curPos, s, n);
     ed.buffer.cursor.colMax = ed.buffer.cursor.curPos.col;
+
+    PushBufferState();
 }
 
 static void HandleKeyDown(SDL_KeyboardEvent const& event) {
-    // TODO: undo/redo, line move, multi-cursor
+    // TODO: line move, multi-cursor
     SDL_Keycode code = event.keysym.sym;
     SDL_Keymod mod = (SDL_Keymod) event.keysym.mod;
     bool const ctrlPressed = mod & KMOD_CTRL,
@@ -478,6 +489,7 @@ static void HandleKeyDown(SDL_KeyboardEvent const& event) {
         }
         InsertCStr(ed.buffer.text, ed.buffer.cursor.curPos, "\n", 1);
         ed.buffer.cursor.colMax = ed.buffer.cursor.curPos.col;
+        PushBufferState();
     }
     else if (code == SDLK_TAB) {
         if (shiftPressed && hasSelection(ed.buffer.cursor)) {
@@ -542,6 +554,7 @@ static void HandleKeyDown(SDL_KeyboardEvent const& event) {
             ed.buffer.cursor.curPos.col += TabSize;
             ed.buffer.cursor.colMax = ed.buffer.cursor.curPos.col;
         }
+        PushBufferState();
     }
     else if (code == SDLK_BACKSPACE) {
         if (hasSelection(ed.buffer.cursor)) {
@@ -576,6 +589,7 @@ static void HandleKeyDown(SDL_KeyboardEvent const& event) {
             }
         }
         ed.buffer.cursor.colMax = ed.buffer.cursor.curPos.col;
+        PushBufferState();
     }
     else if (code == SDLK_DELETE) {
         if (hasSelection(ed.buffer.cursor)) {
@@ -605,6 +619,7 @@ static void HandleKeyDown(SDL_KeyboardEvent const& event) {
             }
         }
         ed.buffer.cursor.colMax = ed.buffer.cursor.curPos.col;
+        PushBufferState();
     }
     // directional keys
     else if (
@@ -716,7 +731,19 @@ static void HandleKeyDown(SDL_KeyboardEvent const& event) {
             default: assert(0 && "Unreachable"); break;
         }
     }
-    // TODO: ctrl+z,y,d,f
+    // TODO: ctrl+d,f
+    else if (code == SDLK_z && ctrlPressed) {
+        // undo
+        if (ed.undoIndex > 0) {
+            ed.buffer = ed.undoHistory[--ed.undoIndex];
+        }
+    }
+    else if (code == SDLK_y && ctrlPressed) {
+        // redo
+        if (ed.undoIndex+1 < ed.undoHistory.size()) {
+            ed.buffer = ed.undoHistory[++ed.undoIndex];
+        }
+    }
     else if (code == SDLK_s && ctrlPressed) {
         // TODO: check the filename immediately before saving as well
         // this matters if more than one editor is opened at once
@@ -750,6 +777,7 @@ static void HandleKeyDown(SDL_KeyboardEvent const& event) {
             EraseSelection(ed.buffer.text, ed.buffer.cursor);
             ResetCursor(ed.buffer.text, ed.buffer.cursor, ed.buffer.cursor.selBegin);
             StopSelecting(ed.buffer.cursor);
+            PushBufferState();
         }
     }
     else if (code == SDLK_v && ctrlPressed) {
@@ -771,6 +799,7 @@ static void HandleKeyDown(SDL_KeyboardEvent const& event) {
 
             InsertCStr(ed.buffer.text, ed.buffer.cursor.curPos, clip, n);
             SDL_free(clip);
+            PushBufferState();
         }
     }
     else if ((code == SDLK_EQUALS || code == SDLK_KP_PLUS) && ctrlPressed) {
@@ -879,12 +908,14 @@ int main(int argc, char** argv) {
     ed.buffer.text = Text{1};
     if (sourceLen > 0) {
         InsertCStr(ed.buffer.text, ed.buffer.cursor.curPos, sourceContents, sourceLen);
-        ed.buffer.cursor.curPos.ln = 0;
-        ed.buffer.cursor.curPos.col = 0;
         free(sourceContents);
     }
     ed.buffer.cursor.curPos.col = 0;
     ed.buffer.cursor.curPos.ln = 0;
+
+    ed.undoIndex = 0;
+    PushBufferState();
+
     ed.isUpdated = false;
 
     Uint32 const timestep = 1000 / TargetFPS;
