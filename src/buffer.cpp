@@ -1,6 +1,8 @@
-#include "error.h"
-#include "cursor.h"
+#include "error.hpp"
+#include "buffer.hpp"
 #include "trash-lang/src/stringview.h"
+
+#include <vector>
 
 #include <assert.h>
 #include <ctype.h>
@@ -118,7 +120,7 @@ void StopSelecting(Cursor& cursor) {
     cursor.selEnd.ln = cursor.curPos.ln;
 }
 
-void EraseBetween(Text& text, Cursor& cursor, CursorPos begin, CursorPos end) {
+void EraseBetween(Text& text, CursorPos begin, CursorPos end) {
     if (begin.ln == end.ln) {
         text[begin.ln].erase(text[begin.ln].begin()+begin.col, text[begin.ln].begin()+end.col);
     }
@@ -128,17 +130,18 @@ void EraseBetween(Text& text, Cursor& cursor, CursorPos begin, CursorPos end) {
         text[begin.ln].insert(text[begin.ln].end(), text[end.ln].begin()+end.col, text[end.ln].end());
         text.erase(text.begin()+begin.ln+1, text.begin()+end.ln+1);
     }
+}
 
+void EraseSelection(Text& text, Cursor const& cursor) {
+    EraseBetween(text, cursor.selBegin, cursor.selEnd);
+}
+
+void ResetCursor(Text& text, Cursor& cursor, CursorPos begin) {
     cursor.curPos.ln = begin.ln;
     size_t cols = text[cursor.curPos.ln].size();
     cursor.curPos.col = begin.col;
     if (cursor.curPos.col > cols)
         cursor.curPos.col = cols;
-    StopSelecting(cursor);
-}
-
-void EraseSelection(Text& text, Cursor& cursor) {
-    EraseBetween(text, cursor, cursor.selBegin, cursor.selEnd);
 }
 
 void ExtractText(Text& text, CursorPos selBegin, CursorPos selEnd, char** outBuff, size_t* outSize) {
@@ -188,7 +191,7 @@ void ExtractText(Text& text, CursorPos selBegin, CursorPos selEnd, char** outBuf
     }
 }
 
-void InsertText(Text& text, Cursor& cursor, const char* s, size_t n) {
+void InsertCStr(Text& text, CursorPos& curPos, const char* s, size_t n) {
     // assumes s is 'clean'
     std::vector<size_t> lineIdx;
     for (size_t i = 0; i < n; ++i) {
@@ -202,24 +205,29 @@ void InsertText(Text& text, Cursor& cursor, const char* s, size_t n) {
 
     if (nLines > 0) {
         // split line
-        text.insert(text.begin()+cursor.curPos.ln+1, nLines, std::vector<char>{});
-        text[cursor.curPos.ln+nLines].insert(text[cursor.curPos.ln+nLines].begin(),
-            text[cursor.curPos.ln].begin()+cursor.curPos.col,
-            text[cursor.curPos.ln].end());
-        text[cursor.curPos.ln].erase(
-            text[cursor.curPos.ln].begin()+cursor.curPos.col,
-            text[cursor.curPos.ln].end());
+        text.insert(text.begin()+curPos.ln+1, nLines, Line{});
+        text[curPos.ln+nLines].insert(text[curPos.ln+nLines].begin(),
+            text[curPos.ln].begin()+curPos.col,
+            text[curPos.ln].end());
+        text[curPos.ln].erase(
+            text[curPos.ln].begin()+curPos.col,
+            text[curPos.ln].end());
     }
-    text[cursor.curPos.ln].insert(
-        text[cursor.curPos.ln].begin()+cursor.curPos.col,
+    text[curPos.ln].insert(
+        text[curPos.ln].begin()+curPos.col,
         s, s+lineIdx[0]);
-    cursor.curPos.col += lineIdx[0];
+    curPos.col += lineIdx[0];
     for (size_t i = 0; i < nLines; ++i) {
         size_t sz = lineIdx[i+1]-lineIdx[i]-1;
-        ++cursor.curPos.ln;
-        text[cursor.curPos.ln].insert(
-            text[cursor.curPos.ln].begin(),
+        ++curPos.ln;
+        text[curPos.ln].insert(
+            text[curPos.ln].begin(),
             s+lineIdx[i]+1, s+lineIdx[i]+1+sz);
-        cursor.curPos.col = sz;
+        curPos.col = sz;
     }
 }
+
+void InsertText(Text& text, CursorPos& curPos, Line const& line, size_t begin, size_t end) {
+    InsertCStr(text, curPos, line.data()+begin, end-begin);
+}
+

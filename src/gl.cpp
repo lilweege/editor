@@ -1,5 +1,5 @@
-#include "gl.h"
-#include "file.h"
+#include "gl.hpp"
+#include "file.hpp"
 
 #include <stdio.h>
 #include <stdlib.h>
